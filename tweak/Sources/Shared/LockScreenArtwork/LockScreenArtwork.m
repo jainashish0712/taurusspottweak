@@ -32,14 +32,15 @@ NSArray<NSString *> *SGAnimatedArtworkKeys(void) {
 NSString *SGAnimatedArtworkKey(CGFloat *aspect) {
     if (@available(iOS 26.0, *)) {
         NSArray<NSString *> *supported = SGAnimatedArtworkKeys();
-    if (!supported.count) return nil;
-    if ([supported containsObject:MPNowPlayingInfoProperty3x4AnimatedArtwork]) {
-        if (aspect) *aspect = 3.0 / 4.0;
-        return MPNowPlayingInfoProperty3x4AnimatedArtwork;
-    }
-    if ([supported containsObject:MPNowPlayingInfoProperty1x1AnimatedArtwork]) {
-        if (aspect) *aspect = 1;
-        return MPNowPlayingInfoProperty1x1AnimatedArtwork;
+        if (!supported.count) return nil;
+        if ([supported containsObject:MPNowPlayingInfoProperty3x4AnimatedArtwork]) {
+            if (aspect) *aspect = 3.0 / 4.0;
+            return MPNowPlayingInfoProperty3x4AnimatedArtwork;
+        }
+        if ([supported containsObject:MPNowPlayingInfoProperty1x1AnimatedArtwork]) {
+            if (aspect) *aspect = 1;
+            return MPNowPlayingInfoProperty1x1AnimatedArtwork;
+        }
     }
     return nil;
 }
