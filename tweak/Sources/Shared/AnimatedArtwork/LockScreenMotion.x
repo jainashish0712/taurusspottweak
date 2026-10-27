@@ -215,7 +215,7 @@ static void showFill(NSString *picture) {
 }
 
 void SGLockMotionShowPlain(BOOL plain) {
-    if (NSClassFromString(@"MPMediaItemAnimatedArtwork") != nil) {
+    if (@available(iOS 26.0, *)) {
         sg_plain = plain;
         BOOL want = plain && SGLockScreenCanvasLyricsEnabled() && motionOn(sg_choice) && sg_lyricsFile;
         if (want == sg_plainShown) return;
@@ -226,7 +226,7 @@ void SGLockMotionShowPlain(BOOL plain) {
 }
 
 %ctor {
-    if (NSClassFromString(@"MPMediaItemAnimatedArtwork") != nil) {
+    if (@available(iOS 26.0, *)) {
         sg_choice = SGLockScreenArtwork();
         sg_configuredChoice = sg_choice;
         sg_queue = dispatch_queue_create("spotifyglass.lockscreen.motion", DISPATCH_QUEUE_SERIAL);

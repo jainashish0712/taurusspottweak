@@ -282,7 +282,7 @@ static BOOL headOffset(double *pitch, double *yaw) {
 
 - (UIButton *)buttonTitled:(NSString *)title prominent:(BOOL)prominent action:(SEL)action {
     UIButtonConfiguration *config;
-    if ([UIButtonConfiguration respondsToSelector:@selector(prominentGlassButtonConfiguration)]) config = prominent ? [UIButtonConfiguration prominentGlassButtonConfiguration] : [UIButtonConfiguration glassButtonConfiguration];
+    if (@available(iOS 26.0, *)) config = prominent ? [UIButtonConfiguration prominentGlassButtonConfiguration] : [UIButtonConfiguration glassButtonConfiguration];
     else config = prominent ? [UIButtonConfiguration filledButtonConfiguration] : [UIButtonConfiguration grayButtonConfiguration];
     config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
     if (prominent) {
@@ -339,7 +339,7 @@ static BOOL headOffset(double *pitch, double *yaw) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    if (!NSClassFromString(@"UIGlassEffect")) self.view.backgroundColor = SGPageBackground();
+    if (@available(iOS 26.0, *)) {} else self.view.backgroundColor = SGPageBackground();
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel target:self action:@selector(cancel)];
 
     _dial = [SGTeachRing new];

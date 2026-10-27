@@ -213,7 +213,7 @@ static void showProblem(UIViewController *page, NSString *title, NSString *messa
     _search.searchBar.autocorrectionType = UITextAutocorrectionTypeNo;
     self.navigationItem.searchController = _search;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
-    if ([self.navigationItem respondsToSelector:@selector(setPreferredSearchBarPlacement:)]) {
+    if (@available(iOS 26.0, *)) {
         self.navigationItem.preferredSearchBarPlacement = UINavigationItemSearchBarPlacementIntegratedButton;
         self.navigationItem.searchBarPlacementAllowsToolbarIntegration = YES;
         self.toolbarItems = @[[UIBarButtonItem flexibleSpaceItem], self.navigationItem.searchBarPlacementBarButtonItem];
@@ -232,7 +232,7 @@ static void showProblem(UIViewController *page, NSString *title, NSString *messa
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    if ([self.navigationItem respondsToSelector:@selector(setPreferredSearchBarPlacement:)]) [self.navigationController setToolbarHidden:NO animated:animated];
+    if (@available(iOS 26.0, *)) [self.navigationController setToolbarHidden:NO animated:animated];
     // Hundreds of rows want the whole height.
     UISheetPresentationController *sheet = self.navigationController.sheetPresentationController;
     [sheet animateChanges:^{

@@ -2,7 +2,7 @@
 #import "Core/SGCore.h"
 
 static void soften(UIScrollView *scrollView) {
-    if ([scrollView respondsToSelector:@selector(topEdgeEffect)]) {
+    if (@available(iOS 26.0, *)) {
         // The style last set here, so a layout pass the setter itself causes does not set it again.
         static char setKey;
         UIScrollEdgeEffect *top = scrollView.topEdgeEffect;

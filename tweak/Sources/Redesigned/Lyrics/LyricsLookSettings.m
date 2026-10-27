@@ -152,7 +152,7 @@ static UIColor *readableOn(UIColor *color) {
 
 static UIButtonConfiguration *chipConfiguration(NSString *title, NSString *symbol, BOOL chosen) {
     UIButtonConfiguration *config;
-    if ([UIButtonConfiguration respondsToSelector:@selector(prominentGlassButtonConfiguration)]) {
+    if (@available(iOS 26.0, *)) {
         config = chosen ? [UIButtonConfiguration prominentGlassButtonConfiguration] : [UIButtonConfiguration glassButtonConfiguration];
     } else {
         config = chosen ? [UIButtonConfiguration filledButtonConfiguration] : [UIButtonConfiguration grayButtonConfiguration];

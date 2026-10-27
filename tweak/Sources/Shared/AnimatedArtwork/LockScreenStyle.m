@@ -19,7 +19,7 @@ static NSArray<NSString *> *defaultStarViewOrder(void) {
 }
 
 SGLockArtwork SGLockScreenArtwork(void) {
-    if (NSClassFromString(@"MPMediaItemAnimatedArtwork") != nil) {
+    if (@available(iOS 26.0, *)) {
         static dispatch_once_t once;
         dispatch_once(&once, ^{
             NSUserDefaults *store = NSUserDefaults.standardUserDefaults;

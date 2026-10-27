@@ -215,7 +215,7 @@ static SGLockLine *lineAt(NSArray<SGKaraokeLine *> *lines, NSInteger index, BOOL
 }
 
 static void tick(void) {
-    if (NSClassFromString(@"MPMediaItemAnimatedArtwork") != nil) {
+    if (@available(iOS 26.0, *)) {
         SPTPlayerState *state = SGPlayerState();
         NSString *trackID = SGKaraokePlayingTrack();
         if (!trackID || !state) {
@@ -332,7 +332,7 @@ static void setTicking(BOOL on) {
 @end
 
 %ctor {
-    if (NSClassFromString(@"MPMediaItemAnimatedArtwork") != nil) {
+    if (@available(iOS 26.0, *)) {
         sg_lock = [NSObject new];
         sg_queue = dispatch_queue_create("spotifyglass.lockscreen.lyrics", DISPATCH_QUEUE_SERIAL);
         sg_previewQueue = dispatch_queue_create("spotifyglass.lockscreen.lyrics.preview", DISPATCH_QUEUE_SERIAL);

@@ -26,8 +26,7 @@ static const NSInteger kMostResults = 6;
     self.layer.cornerCurve = kCACornerCurveContinuous;
     self.clipsToBounds = YES;
     UIVisualEffect *effect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
-    Class glassClass = NSClassFromString(@"UIGlassEffect");
-    if ([glassClass respondsToSelector:@selector(effectWithStyle:)]) effect = [glassClass effectWithStyle:UIGlassEffectStyleRegular];
+    if (@available(iOS 26.0, *)) effect = [UIGlassEffect effectWithStyle:UIGlassEffectStyleRegular];
     _glass = [[UIVisualEffectView alloc] initWithEffect:effect];
     _glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self addSubview:_glass];
@@ -102,9 +101,8 @@ static const NSInteger kMostResults = 6;
     if (!(self = [super initWithFrame:frame])) return nil;
     self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     UIVisualEffect *effect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
-    Class glassClass2 = NSClassFromString(@"UIGlassEffect");
-    if ([glassClass2 respondsToSelector:@selector(effectWithStyle:)]) {
-        UIGlassEffect *glass = [glassClass2 effectWithStyle:UIGlassEffectStyleRegular];
+    if (@available(iOS 26.0, *)) {
+        UIGlassEffect *glass = [UIGlassEffect effectWithStyle:UIGlassEffectStyleRegular];
         glass.interactive = YES;
         effect = glass;
     }

@@ -240,7 +240,7 @@ static UIViewController *modSettingsPage(void) {
         audioEffects,
         pageRow(@"Vibrations", @"iphone.radiowaves.left.and.right", ^UIViewController *{ return SGVibrationsSettingsPage(); }),
     ]];
-    if (NSClassFromString(@"ActivityAuthorizationInfo") != nil) {
+    if (@available(iOS 17.0, *)) {
         SGModRow *liveActivity = pageRow(@"Live Activity", @"platter.filled.top.iphone", ^UIViewController *{ return SGLiveActivitySettingsPage(); });
         liveActivity.value = ^NSString *{ return SGLiveActivitySummary(); };
         [parts addObject:liveActivity];

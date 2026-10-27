@@ -27,7 +27,7 @@ static char kPaneKey;
 
 static UIButton *glassButton(NSString *title) {
     UIButtonConfiguration *config;
-    if ([UIButtonConfiguration respondsToSelector:@selector(prominentGlassButtonConfiguration)]) config = [UIButtonConfiguration prominentGlassButtonConfiguration];
+    if (@available(iOS 26.0, *)) config = [UIButtonConfiguration prominentGlassButtonConfiguration];
     else config = [UIButtonConfiguration filledButtonConfiguration];
     config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
     config.baseBackgroundColor = SGGreen();
@@ -260,7 +260,7 @@ static UIButton *glassButton(NSString *title) {
 // iOS 16 has no symbol effects and skips the bounce.
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    if ([_hero respondsToSelector:@selector(addSymbolEffect:)]) [_hero addSymbolEffect:[NSClassFromString(@"NSSymbolBounceEffect") effect]];
+    if (@available(iOS 17.0, *)) [_hero addSymbolEffect:[NSClassFromString(@"NSSymbolBounceEffect") effect]];
 }
 
 - (void)picked:(SGLookCard *)card {

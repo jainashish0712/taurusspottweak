@@ -19,7 +19,7 @@ static BOOL starViewOrderContains(NSString *key) {
 }
 
 NSArray *SGLockScreenMotionRows(void) {
-    if (NSClassFromString(@"MPMediaItemAnimatedArtwork") != nil) {
+    if (@available(iOS 26.0, *)) {
         SGLockScreenArtwork();
         SGModRow *lyrics = SGSwitchRow(@"Show lock-screen lyrics",
             @"Allow the Lyrics view on the lock screen; turning this off keeps artwork and in-app lyrics",

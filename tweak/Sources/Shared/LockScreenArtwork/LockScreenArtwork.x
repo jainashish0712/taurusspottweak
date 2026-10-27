@@ -45,7 +45,7 @@ static UIImage *filled(UIImage *image, CGSize size) {
 }
 
 static id artworkFor(NSString *artworkID, NSURL *file, UIImage *still) {
-    if (SGAnimatedArtworkAvailable()) {
+    if (@available(iOS 26.0, *)) {
         return [[MPMediaItemAnimatedArtwork alloc] initWithArtworkID:artworkID
             previewImageRequestHandler:^(CGSize size, void (^done)(UIImage *image)) {
                 SGLog(@"lock artwork: still asked at %.0fx%.0f", size.width, size.height);
@@ -248,7 +248,7 @@ static SGArtworkWatcher *sg_watcher;
 %end
 
 %ctor {
-    if (SGAnimatedArtworkAvailable()) {
+    if (@available(iOS 26.0, *)) {
         SGLog(@"lock artwork: handled by full-screen artwork settings");
         return;
     }

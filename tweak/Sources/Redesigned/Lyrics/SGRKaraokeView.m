@@ -1669,7 +1669,7 @@ static BOOL lyricsAreForeign(NSArray<SGKaraokeLine *> *lines, NSString *language
         // The system's glass, which turns solid under Reduce Transparency by itself; before iOS 26, the
         // Kit's solid fill in its place.
         UIButtonConfiguration *config;
-        if ([UIButtonConfiguration respondsToSelector:@selector(glassButtonConfiguration)]) {
+        if (@available(iOS 26.0, *)) {
             config = [UIButtonConfiguration glassButtonConfiguration];
         } else {
             config = [UIButtonConfiguration filledButtonConfiguration];

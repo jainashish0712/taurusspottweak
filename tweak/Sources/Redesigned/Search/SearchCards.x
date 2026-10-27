@@ -83,7 +83,7 @@ static UIColor *darker(UIColor *color) {
 
 static BOOL glassAllowed(void) {
     if (SGRReduceTransparency()) return NO;
-    if (NSClassFromString(@"UIGlassEffect") != nil) return YES;
+    if (@available(iOS 26.0, *)) return YES;
     return NO;
 }
 
@@ -121,11 +121,12 @@ static void paint(SGRSearchCardParts *parts, UIColor *color) {
     if (parts.color && CGColorEqualToColor(parts.color.CGColor, color.CGColor)) return;
     parts.color = color;
     ((CAGradientLayer *)parts.plate.layer).colors = @[(id)color.CGColor, (id)darker(color).CGColor];
-    Class glassClass = NSClassFromString(@"UIGlassEffect");
-    if (glassClass && parts.glass) {
-        UIGlassEffect *effect = [glassClass effectWithStyle:UIGlassEffectStyleClear];
-        effect.tintColor = [color colorWithAlphaComponent:kTintAlpha];
-        parts.glass.effect = effect;
+    if (@available(iOS 26.0, *)) {
+        if (parts.glass) {
+            UIGlassEffect *effect = [UIGlassEffect effectWithStyle:UIGlassEffectStyleClear];
+            effect.tintColor = [color colorWithAlphaComponent:kTintAlpha];
+            parts.glass.effect = effect;
+        }
     }
 }
 

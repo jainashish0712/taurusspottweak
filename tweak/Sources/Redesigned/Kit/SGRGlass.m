@@ -10,7 +10,7 @@ typedef NS_ENUM(NSInteger, SGRGlassMode) {
 
 static SGRGlassMode glassMode(void) {
     if (SGRReduceTransparency()) return SGRGlassModeSolid;
-    if (NSClassFromString(@"UIGlassEffect") != nil) return SGRGlassModeGlass;
+    if (@available(iOS 26.0, *)) return SGRGlassModeGlass;
     return SGRGlassModeBlur;
 }
 
