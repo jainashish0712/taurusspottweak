@@ -41,8 +41,7 @@ SGUpdateRelease *SGUpdateNewestRelease(void) {
 }
 
 NSString *SGUpdateVersion(void) {
-    NSString *version = SGUpdateNewestRelease().version;
-    return version.length && isNewer(version, @(SG_VERSION)) ? version : nil;
+    return nil;
 }
 
 #pragma mark - the check

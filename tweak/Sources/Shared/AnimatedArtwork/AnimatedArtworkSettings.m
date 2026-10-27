@@ -19,7 +19,7 @@ static BOOL starViewOrderContains(NSString *key) {
 }
 
 NSArray *SGLockScreenMotionRows(void) {
-    if (@available(iOS 26.0, *)) {
+    if (NSClassFromString(@"MPMediaItemAnimatedArtwork") != nil) {
         SGLockScreenArtwork();
         SGModRow *lyrics = SGSwitchRow(@"Show lock-screen lyrics",
             @"Allow the Lyrics view on the lock screen; turning this off keeps artwork and in-app lyrics",
@@ -104,11 +104,9 @@ SGModRow *SGLockScreenStarViewsRow(void) {
 
 // Below iOS 26 the section stays, with one row that says why there is nothing to pick.
 SGModRow *SGLockScreenArtworkNeedsRow(void) {
-    return SGStatActionRow(@"Full-screen artwork", nil, ^NSString *{ return @"Needs iOS 26"; }, ^{
-        NSString *message = [NSString stringWithFormat:@"This iPhone has iOS %@. The lock screen takes moving artwork "
-                                                       @"from apps from iOS 26 on, so the Canvas and Apple Music's animated "
-                                                       @"covers and Fill can show there once the iPhone is updated.", UIDevice.currentDevice.systemVersion];
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Needs iOS 26" message:message
+    return SGStatActionRow(@"Full-screen artwork", nil, ^NSString *{ return @"Unavailable"; }, ^{
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Full-screen artwork"
+                                                                       message:@"Moving artwork is not supported by the system on this device."
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
         [SGTopController() presentViewController:alert animated:YES completion:nil];

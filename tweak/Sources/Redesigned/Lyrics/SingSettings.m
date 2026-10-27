@@ -101,9 +101,8 @@ static void confirmRemove(void) {
 
 // Below iOS 18 the switch is a row saying what is missing, the way Redesigned UI's does below iOS 26.
 static SGModRow *unavailableRow(void) {
-    return SGStatActionRow(@"Sing", nil, ^NSString *{ return @"Needs iOS 18"; }, ^{
-        tell(@"Sing", [NSString stringWithFormat:@"Sing separates a song's vocals on this iPhone with a voice model that needs iOS 18. "
-                       "This iPhone runs iOS %@.", UIDevice.currentDevice.systemVersion]);
+    return SGStatActionRow(@"Sing", nil, ^NSString *{ return @"Unavailable"; }, ^{
+        tell(@"Sing", @"Sing voice model is unavailable on this device.");
     });
 }
 
@@ -213,7 +212,7 @@ UIViewController *SGRKaraokeSettingsPage(void) {
 
 // Beside the main page's row: what Sing would do now, or how far its model has come.
 NSString *SGRKaraokeSummary(void) {
-    if (!SGSingSupported()) return @"Needs iOS 18";
+    if (!SGSingSupported()) return @"Unavailable";
     SGSingModelState state = SGSingModelCurrentState();
     if (state == SGSingModelDownloading) return [NSString stringWithFormat:@"%lld %%", SGSingModelReceived() * 100 / SGSingModelSize()];
     if (state == SGSingModelChecking) return @"Checking…";

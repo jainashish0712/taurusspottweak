@@ -3,8 +3,7 @@
 #import "SGPrefs.h"
 
 BOOL SGRedesignAvailable(void) {
-    if (@available(iOS 26.0, *)) return YES;
-    return NO;
+    return YES;
 }
 
 BOOL SGRedesignedUI(void) {
@@ -12,7 +11,7 @@ BOOL SGRedesignedUI(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         on = SGRedesignedUIStored();
-        SGLog(@"ui: %@%@", on ? @"redesigned" : @"native", SGRedesignAvailable() ? @"" : @" (the redesign needs iOS 26)");
+        SGLog(@"ui: %@", on ? @"redesigned" : @"native");
     });
     return on;
 }

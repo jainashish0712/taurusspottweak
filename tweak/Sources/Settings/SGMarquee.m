@@ -96,7 +96,7 @@ static NSString *const kScroll = @"sg.marquee";
     scroll.duration = total;
     scroll.repeatCount = HUGE_VALF;
     // A text's glide needs no more than the display's base rate.
-    if (@available(iOS 15.0, *)) scroll.preferredFrameRateRange = CAFrameRateRangeMake(30, 60, 60);
+    if ([scroll respondsToSelector:@selector(setPreferredFrameRateRange:)]) scroll.preferredFrameRateRange = CAFrameRateRangeMake(30, 60, 60);
     [_label.layer addAnimation:scroll forKey:kScroll];
 }
 

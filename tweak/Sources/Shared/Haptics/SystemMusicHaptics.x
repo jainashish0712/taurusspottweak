@@ -303,7 +303,7 @@ API_AVAILABLE(ios(18.0))
     SGMigrateMusicHaptics();
     sg_isrcs = [NSCache new];
     sg_isrcs.countLimit = kKeptISRCs;
-    if (@available(iOS 18.0, *)) {
+    if (NSClassFromString(@"MAMusicHapticsManager") != nil) {
         static SGNativeMusicHaptics *native;
         native = [SGNativeMusicHaptics new];
         SGAddPlayerStateObserver(native);

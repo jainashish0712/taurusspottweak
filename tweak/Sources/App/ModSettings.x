@@ -212,7 +212,7 @@ static UIViewController *modSettingsPage(void) {
     });
     update.symbol = @"arrow.down.circle.fill";
     update.color = SGGreen();
-    update.visible = ^BOOL { return SGUpdateVersion() != nil; };
+    update.visible = ^BOOL { return NO; };
     update.refreshOn = SGUpdateCheckedNotification;
     [topRows addObject:update];
     SGModRow *discord = SGLinkRow(@"Join the Discord", @"Release pings, help and previews", SGDiscordURL);
@@ -240,7 +240,7 @@ static UIViewController *modSettingsPage(void) {
         audioEffects,
         pageRow(@"Vibrations", @"iphone.radiowaves.left.and.right", ^UIViewController *{ return SGVibrationsSettingsPage(); }),
     ]];
-    if (@available(iOS 17.0, *)) {
+    if (NSClassFromString(@"ActivityAuthorizationInfo") != nil) {
         SGModRow *liveActivity = pageRow(@"Live Activity", @"platter.filled.top.iphone", ^UIViewController *{ return SGLiveActivitySettingsPage(); });
         liveActivity.value = ^NSString *{ return SGLiveActivitySummary(); };
         [parts addObject:liveActivity];

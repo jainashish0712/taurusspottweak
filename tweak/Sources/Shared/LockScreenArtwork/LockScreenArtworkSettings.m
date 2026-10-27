@@ -7,7 +7,7 @@
 
 static void sayWhatIsMissing(void) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Animated lock screen"
-        message:[NSString stringWithFormat:@"Animated artwork is the lock screen's own, and iOS takes one only from 26 on. This phone runs iOS %@, where the cover stays still.", UIDevice.currentDevice.systemVersion]
+        message:@"Animated artwork is not supported by the system on this device."
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
     [SGTopController() presentViewController:alert animated:YES completion:nil];
@@ -22,7 +22,7 @@ static NSArray<SGOrderItem *> *sources(void) {
 
 NSArray<SGModRow *> *SGAnimatedArtworkRows(void) {
     if (!SGAnimatedArtworkAvailable())
-        return @[SGStatActionRow(@"Animated lock screen", nil, ^NSString *{ return @"Needs iOS 26"; }, ^{ sayWhatIsMissing(); })];
+        return @[SGStatActionRow(@"Animated lock screen", nil, ^NSString *{ return @"Unavailable"; }, ^{ sayWhatIsMissing(); })];
     SGModRow *order = SGPageRow(@"Sources", ^UIViewController *{
         return SGOrderPage(@"Artwork sources", sources(), ^NSArray<NSString *> *{ return SGArtworkOrder(); },
                            ^(NSArray<NSString *> *keys) { SGArtworkSetOrder(keys); },

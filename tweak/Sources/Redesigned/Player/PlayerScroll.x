@@ -16,7 +16,7 @@ static __weak UIScrollView *sg_loggedList;
 // Nothing scrolls under the header, which is in the list itself: the top edge's blur only blurs it. Set from the
 // list's own layout, since the first scroll waits for a finger.
 static void hideTopEdge(UIScrollView *list) {
-    if (@available(iOS 26.0, *)) {
+    if ([list respondsToSelector:@selector(topEdgeEffect)]) {
         if (!list.topEdgeEffect.hidden && [list.accessibilityIdentifier isEqualToString:kListIdentifier]) list.topEdgeEffect.hidden = YES;
     }
 }

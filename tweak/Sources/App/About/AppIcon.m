@@ -127,10 +127,7 @@ static UIImage *preview(NSString *file) {
 
 SGModRow *SGAppIconRow(void) {
     if (availableFiles().count < 2) return nil;
-    if (@available(iOS 26.0, *)) {
-        SGModRow *row = SGPageRow(@"App icon", ^UIViewController *{ return [SGAppIconPage new]; });
-        row.value = ^NSString *{ return titleOf(currentFile()); };
-        return row;
-    }
-    return SGStatRow(@"App icon", ^NSString *{ return @"Needs iOS 26"; });
+    SGModRow *row = SGPageRow(@"App icon", ^UIViewController *{ return [SGAppIconPage new]; });
+    row.value = ^NSString *{ return titleOf(currentFile()); };
+    return row;
 }

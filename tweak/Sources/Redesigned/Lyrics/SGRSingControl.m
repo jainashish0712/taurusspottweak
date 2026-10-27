@@ -412,11 +412,10 @@ static SGRSingLook lookOf(SGSingState state) {
     UIView *content = glass;
     if ([glass isKindOfClass:UIVisualEffectView.class]) {
         UIVisualEffectView *pane = (id)glass;
-        if (@available(iOS 26.0, *)) {
-            if ([pane.effect isKindOfClass:UIGlassEffect.class] && !((UIGlassEffect *)pane.effect).interactive) {
-                UIGlassEffect *effect = [(UIGlassEffect *)pane.effect copy];
-                effect.interactive = YES; pane.effect = effect;
-            }
+        Class glassClass = NSClassFromString(@"UIGlassEffect");
+        if (glassClass && [pane.effect isKindOfClass:glassClass] && !((UIGlassEffect *)pane.effect).interactive) {
+            UIGlassEffect *effect = [(UIGlassEffect *)pane.effect copy];
+            effect.interactive = YES; pane.effect = effect;
         }
         content = pane.contentView;
     }

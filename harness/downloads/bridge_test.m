@@ -16,8 +16,8 @@ int main(void) { @autoreleasepool {
     NSCAssert([SGDownloadsSummary()containsString:@"isn't loaded"],@"supported version is not blamed for missing engine");
     NSCAssert([SGDownloadsUnavailableReason()containsString:@"missing or could not load"],@"missing engine explained");
     version=@"9.1.91";
-    NSCAssert([SGDownloadsSummary()containsString:@"9.1.91"],@"unsupported version identified accurately");
-    NSCAssert([SGDownloadsUnavailableReason()containsString:@"exact Spotify 9.1.90 build"],@"exact verified build required");
+    NSCAssert([SGDownloadsSummary()containsString:@"isn't loaded"],@"version check removed: non-9.1.90 is not blamed");
+    NSCAssert([SGDownloadsUnavailableReason()containsString:@"missing or could not load"],@"missing engine explained without version lock");
     Class companion=objc_allocateClassPair(NSObject.class,"SAPTaurusBridge",0);
     __block NSInteger interfaceVersion=0;
     class_addMethod(object_getClass(companion),@selector(interfaceVersion),imp_implementationWithBlock(^NSInteger(id self){return interfaceVersion;}),"q@:");

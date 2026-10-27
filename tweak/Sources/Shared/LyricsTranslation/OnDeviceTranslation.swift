@@ -60,7 +60,7 @@ public final class SGOnDeviceTranslation: NSObject {
 
     // One translation per line, "" for a line with no words; or nil and why not.
     @objc public static func translate(_ lines: [String], to languageTag: String, done: @escaping ([String]?, String?) -> Void) {
-        guard #available(iOS 26.0, *) else { return finish(done, nil, "Translating on this iPhone needs iOS 26.") }
+        guard #available(iOS 26.0, *) else { return finish(done, nil, "Translating on this iPhone is unavailable.") }
         let target = Locale.Language(identifier: languageTag)
         guard let source = sourceLanguage(lines, target: target) else { return finish(done, nil, "The song's language could not be told from its words.") }
         if same(source, target) { return finish(done, nil, "The song is already in \(name(target)).") }
@@ -116,7 +116,7 @@ public final class SGOnDeviceTranslation: NSObject {
 
     @objc public static func translateWithAppleIntelligence(_ lines: [String], to languageTag: String, song: String?, progress: @escaping ([String]) -> Void,
                                                             done: @escaping ([String]?, String?) -> Void) {
-        guard #available(iOS 26.0, *) else { return finish(done, nil, "Apple Intelligence needs iOS 26.") }
+        guard #available(iOS 26.0, *) else { return finish(done, nil, "Apple Intelligence is unavailable.") }
         let language = name(Locale.Language(identifier: languageTag))
         // Only the lines given text ("" for those translated already or with no words), 12 to a batch. A batch
         // the model refuses is asked again in halves (translateSplitting), and one that fails is left out while

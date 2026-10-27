@@ -75,7 +75,7 @@ static void arm(void) {
 @end
 
 %ctor {
-    if (@available(iOS 26.0, *)) {
+    if (NSClassFromString(@"MPMediaItemAnimatedArtwork") != nil) {
         BOOL atLaunch = starOn();
         SGRegisterFlagForcer(YES, ^id(NSString *key) {
             return atLaunch && [key isEqualToString:kLikeDislikeFlag] ? @NO : nil;

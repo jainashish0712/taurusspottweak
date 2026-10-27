@@ -60,7 +60,7 @@ static CAShapeLayer *newStroke(CGFloat width) {
     if (!(self = [super initWithFrame:CGRectMake(frame.origin.x, frame.origin.y, kWidth, kHeight)])) return nil;
     self.isAccessibilityElement = YES;
     self.accessibilityTraits = UIAccessibilityTraitButton;
-    if (@available(iOS 17.0, *)) self.accessibilityTraits = UIAccessibilityTraitToggleButton;
+    if (&UIAccessibilityTraitToggleButton != NULL) self.accessibilityTraits = UIAccessibilityTraitToggleButton;
 
     _track = [CAShapeLayer layer];
     _track.lineWidth = 1;

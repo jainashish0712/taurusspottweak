@@ -273,7 +273,7 @@ static UIColor *tintFor(SGRDownloadState state) {
 
     if (!ring && !wasRing) {
         UIImage *image = symbolFor(state);
-        if (@available(iOS 17.0, *)) {
+        if ([_symbol respondsToSelector:@selector(setSymbolImage:withContentTransition:)]) {
             if (!SGRReduceMotion()) [_symbol setSymbolImage:image withContentTransition:[NSSymbolReplaceContentTransition replaceDownUpTransition]];
             else _symbol.image = image;
         } else {

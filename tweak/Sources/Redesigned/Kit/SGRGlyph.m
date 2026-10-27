@@ -30,7 +30,7 @@ static const CGFloat kMinTouch = 44, kPressAlpha = 0.5, kPressScale = 0.9, kDisa
     if (!symbol || [symbol isEqualToString:_symbol]) return;
     _symbol = [symbol copy];
     UIImage *image = [UIImage systemImageNamed:symbol];
-    if (@available(iOS 17.0, *)) {
+    if ([self respondsToSelector:@selector(setSymbolImage:withContentTransition:options:)]) {
         if (animated && image && self.window && !SGRReduceMotion()) {
             // Twice UIKit's pace: a control's glyph answers a tap, and the default replace lingers.
             [self setSymbolImage:image withContentTransition:[NSSymbolReplaceContentTransition transition] options:[NSSymbolEffectOptions optionsWithSpeed:2]];

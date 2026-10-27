@@ -45,7 +45,7 @@ static UIImage *filled(UIImage *image, CGSize size) {
 }
 
 static id artworkFor(NSString *artworkID, NSURL *file, UIImage *still) {
-    if (@available(iOS 26.0, *)) {
+    if (SGAnimatedArtworkAvailable()) {
         return [[MPMediaItemAnimatedArtwork alloc] initWithArtworkID:artworkID
             previewImageRequestHandler:^(CGSize size, void (^done)(UIImage *image)) {
                 SGLog(@"lock artwork: still asked at %.0fx%.0f", size.width, size.height);

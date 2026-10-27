@@ -249,7 +249,7 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
         _stateShown = on;
         _takenGlyph = nil;
         _glyph.hidden = NO;
-        if (@available(iOS 17.0, *)) {
+        if ([_glyph respondsToSelector:@selector(setSymbolImage:withContentTransition:)]) {
             if (animated) [_glyph setSymbolImage:image withContentTransition:[NSSymbolReplaceContentTransition replaceDownUpTransition]];
             else _glyph.image = image;
         } else {

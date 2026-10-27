@@ -20,27 +20,25 @@ void SGArtworkSetOrder(NSArray<NSString *> *order) {
 }
 
 BOOL SGAnimatedArtworkAvailable(void) {
-    if (@available(iOS 26.0, *)) return MPMediaItemAnimatedArtwork.class != nil;
-    return NO;
+    return NSClassFromString(@"MPMediaItemAnimatedArtwork") != nil;
 }
 
 NSArray<NSString *> *SGAnimatedArtworkKeys(void) {
-    if (@available(iOS 26.0, *)) return MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys;
+    if ([MPNowPlayingInfoCenter respondsToSelector:@selector(supportedAnimatedArtworkKeys)])
+        return MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys;
     return nil;
 }
 
 NSString *SGAnimatedArtworkKey(CGFloat *aspect) {
-    if (@available(iOS 26.0, *)) {
-        NSArray<NSString *> *supported = SGAnimatedArtworkKeys();
-        // A Canvas is taller than either shape, so the tall key loses the least of it.
-        if ([supported containsObject:MPNowPlayingInfoProperty3x4AnimatedArtwork]) {
-            if (aspect) *aspect = 3.0 / 4.0;
-            return MPNowPlayingInfoProperty3x4AnimatedArtwork;
-        }
-        if ([supported containsObject:MPNowPlayingInfoProperty1x1AnimatedArtwork]) {
-            if (aspect) *aspect = 1;
-            return MPNowPlayingInfoProperty1x1AnimatedArtwork;
-        }
+    NSArray<NSString *> *supported = SGAnimatedArtworkKeys();
+    if (!supported.count) return nil;
+    if ([supported containsObject:MPNowPlayingInfoProperty3x4AnimatedArtwork]) {
+        if (aspect) *aspect = 3.0 / 4.0;
+        return MPNowPlayingInfoProperty3x4AnimatedArtwork;
+    }
+    if ([supported containsObject:MPNowPlayingInfoProperty1x1AnimatedArtwork]) {
+        if (aspect) *aspect = 1;
+        return MPNowPlayingInfoProperty1x1AnimatedArtwork;
     }
     return nil;
 }

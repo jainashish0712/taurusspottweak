@@ -27,7 +27,7 @@ static char kPaneKey;
 
 static UIButton *glassButton(NSString *title) {
     UIButtonConfiguration *config;
-    if (@available(iOS 26.0, *)) config = [UIButtonConfiguration prominentGlassButtonConfiguration];
+    if ([UIButtonConfiguration respondsToSelector:@selector(prominentGlassButtonConfiguration)]) config = [UIButtonConfiguration prominentGlassButtonConfiguration];
     else config = [UIButtonConfiguration filledButtonConfiguration];
     config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
     config.baseBackgroundColor = SGGreen();
@@ -187,9 +187,8 @@ static UIButton *glassButton(NSString *title) {
     UIView *strip = [UIView new];
     [strip addSubview:halo];
 
-    BOOL glass = SGRedesignAvailable();
     UILabel *heading = [UILabel new];
-    heading.text = glass ? @"Pick your look." : @"Your look.";
+    heading.text = @"Pick your look.";
     heading.font = [UIFont systemFontOfSize:30 weight:UIFontWeightBold];
     heading.textColor = UIColor.whiteColor;
     heading.numberOfLines = 0;
@@ -198,13 +197,9 @@ static UIButton *glassButton(NSString *title) {
     _legacy = [[SGLookCard alloc] initWithSymbol:@"slider.horizontal.3" title:@"Legacy" subtitle:@"More options, still looks like Spotify."];
     for (SGLookCard *card in @[_redesigned, _legacy]) [card addTarget:self action:@selector(picked:) forControlEvents:UIControlEventTouchUpInside];
     // The first launch offers the redesign; the tour again from the Mod page shows the stored look.
-    BOOL redesign = glass && (SGFlag(SGKeyOnboardingSeen, NO) ? SGRedesignedUIStored() : YES);
+    BOOL redesign = SGFlag(SGKeyOnboardingSeen, NO) ? SGRedesignedUIStored() : YES;
     _redesigned.selected = redesign;
     _legacy.selected = !redesign;
-    if (!glass) {
-        [_redesigned makeUnavailable:[NSString stringWithFormat:@"Needs iOS 26. This phone runs iOS %@.", UIDevice.currentDevice.systemVersion]];
-        _legacy.enabled = NO;
-    }
     _beta = [self betaNote];
     _beta.hidden = !redesign;
 
@@ -265,7 +260,7 @@ static UIButton *glassButton(NSString *title) {
 // iOS 16 has no symbol effects and skips the bounce.
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    if (@available(iOS 17.0, *)) [_hero addSymbolEffect:[NSClassFromString(@"NSSymbolBounceEffect") effect]];
+    if ([_hero respondsToSelector:@selector(addSymbolEffect:)]) [_hero addSymbolEffect:[NSClassFromString(@"NSSymbolBounceEffect") effect]];
 }
 
 - (void)picked:(SGLookCard *)card {

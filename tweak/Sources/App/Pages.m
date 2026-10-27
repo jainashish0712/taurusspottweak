@@ -72,40 +72,24 @@ static void offerRestart(BOOL on) {
     [SGTopController() presentViewController:alert animated:YES completion:nil];
 }
 
-static SGModRow *unavailableRow(void) {
-    SGModRow *row = SGStatActionRow(@"Redesigned UI", nil, ^NSString *{ return @"Needs iOS 26"; }, ^{
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Redesigned UI"
-            message:[NSString stringWithFormat:@"The redesign is built on Liquid Glass, which iOS 26 draws and no earlier version can. This phone runs iOS %@, so the mod gives you its legacy look instead: Spotify's own screens with everything else the mod adds on them.", UIDevice.currentDevice.systemVersion]
-            preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-        [SGTopController() presentViewController:alert animated:YES completion:nil];
-    });
-    return SGWithSymbol(row, @"sparkles");
-}
-
 UIViewController *SGAppearanceSettingsPage(void) {
     NSMutableArray<SGModRow *> *rows = [NSMutableArray array];
-    if (!SGRedesignAvailable()) {
-        [rows addObject:unavailableRow()];
-        [rows addObjectsFromArray:SGNativeAppearanceRows()];
+    SGModRow *redesign = SGOptionRow(@"Redesigned UI", nil, SGKeyRedesign);
+    redesign.glows = YES;
+    redesign.info = SGRedesignedUIInfo;
+    redesign.changed = ^(BOOL on) {
+        SGSetRedesignedUI(on);
+        offerRestart(on);
+    };
+    [rows addObject:SGWithSymbol(redesign, @"sparkles")];
+    if (SGRedesignedUIStored()) {
+        [rows addObjectsFromArray:SGRAppearanceRows()];
+        [rows addObject:SGRHomeStyleRow()];
+        [rows addObject:SGRHomeTopPicksRow()];
     } else {
-        SGModRow *redesign = SGOptionRow(@"Redesigned UI", nil, SGKeyRedesign);
-        redesign.glows = YES;
-        redesign.info = SGRedesignedUIInfo;
-        redesign.changed = ^(BOOL on) {
-            SGSetRedesignedUI(on);
-            offerRestart(on);
-        };
-        [rows addObject:SGWithSymbol(redesign, @"sparkles")];
-        if (SGRedesignedUIStored()) {
-            [rows addObjectsFromArray:SGRAppearanceRows()];
-            [rows addObject:SGRHomeStyleRow()];
-            [rows addObject:SGRHomeTopPicksRow()];
-        } else {
-            [rows addObjectsFromArray:SGNativeAppearanceRows()];
-        }
-        [rows addObjectsFromArray:SGAppFontRows()];
+        [rows addObjectsFromArray:SGNativeAppearanceRows()];
     }
+    [rows addObjectsFromArray:SGAppFontRows()];
     [rows addObject:sidebarBadgeTextRow()];
     SGModSection *section = SGNotedSection(nil, rows, @"Some changes apply after you restart Spotify.");
     return [[SGModPage alloc] initWithTitle:@"Appearance" intro:nil sections:@[section] footer:nil];

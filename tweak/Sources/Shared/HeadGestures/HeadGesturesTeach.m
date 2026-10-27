@@ -282,7 +282,7 @@ static BOOL headOffset(double *pitch, double *yaw) {
 
 - (UIButton *)buttonTitled:(NSString *)title prominent:(BOOL)prominent action:(SEL)action {
     UIButtonConfiguration *config;
-    if (@available(iOS 26.0, *)) config = prominent ? [UIButtonConfiguration prominentGlassButtonConfiguration] : [UIButtonConfiguration glassButtonConfiguration];
+    if ([UIButtonConfiguration respondsToSelector:@selector(prominentGlassButtonConfiguration)]) config = prominent ? [UIButtonConfiguration prominentGlassButtonConfiguration] : [UIButtonConfiguration glassButtonConfiguration];
     else config = prominent ? [UIButtonConfiguration filledButtonConfiguration] : [UIButtonConfiguration grayButtonConfiguration];
     config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
     if (prominent) {
@@ -339,8 +339,7 @@ static BOOL headOffset(double *pitch, double *yaw) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // iOS 26 gives a sheet its own material; before it the sheet takes the mod's page color.
-    if (@available(iOS 26.0, *)) {} else self.view.backgroundColor = SGPageBackground();
+    if (!NSClassFromString(@"UIGlassEffect")) self.view.backgroundColor = SGPageBackground();
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel target:self action:@selector(cancel)];
 
     _dial = [SGTeachRing new];

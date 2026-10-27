@@ -42,8 +42,7 @@ void SGSetSystemMusicHapticsOn(BOOL on) {
 }
 
 static BOOL backgroundAvailable(void) {
-    if (@available(iOS 18.0, *)) return YES;
-    return NO;
+    return NSClassFromString(@"MAMusicHapticsManager") != nil;
 }
 
 BOOL SGMusicHapticsOn(void) {

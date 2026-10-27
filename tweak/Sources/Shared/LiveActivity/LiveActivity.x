@@ -237,7 +237,7 @@ static void runAction(NSString *action) {
 }
 
 void SGSetLiveActivityEnabled(BOOL on) {
-    if (@available(iOS 17.0, *)) {
+    if (NSClassFromString(@"ActivityAuthorizationInfo") != nil) {
         [sg_timer invalidate];
         sg_timer = nil;
         sg_shown = nil;
@@ -267,7 +267,7 @@ void SGSetLiveActivityEnabled(BOOL on) {
 }
 
 %ctor {
-    if (@available(iOS 17.0, *)) {
+    if (NSClassFromString(@"ActivityAuthorizationInfo") != nil) {
         // It was the redesign's alone until it moved to Shared/; whoever had it on keeps it on.
         SGMigrateKey(SGKeyLiveActivityWas, SGKeyLiveActivity);
         SGMigrateKey(SGKeyLiveActivityViewWas, SGKeyLiveActivityView);

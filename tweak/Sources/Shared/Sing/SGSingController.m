@@ -516,8 +516,7 @@ static void workerStatus(void *context, int32_t status) {
 @end
 
 BOOL SGSingSupported(void) {
-    if (@available(iOS 18.0, *)) return YES;
-    return NO;
+    return NSClassFromString(@"MLModel") != nil;
 }
 void SGSingConfigure(BOOL enabled) {
     enabled = enabled && SGSingSupported();
