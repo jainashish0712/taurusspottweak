@@ -47,12 +47,31 @@ jobs:
 
       - run: make release
 
+      - name: Stage tweak dylib & deb
+        run: |
+          DYLIB="$(find tweak/.theos -name 'spotifyglass.dylib' 2>/dev/null | head -1)"
+          if [ -n "$DYLIB" ] && [ -f "$DYLIB" ]; then
+            cp "$DYLIB" out/spotifyglass.dylib
+            [ -f tweak/spotifyglass.plist ] && cp tweak/spotifyglass.plist out/spotifyglass.plist
+          fi
+          cp tweak/packages/*.deb out/ 2>/dev/null || true
+
       - uses: actions/upload-artifact@v5
         if: inputs.upload_method != 'filebin'
         with:
           name: spoti.ipa
           path: out/*.ipa
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v5
+        if: inputs.upload_method != 'filebin'
+        with:
+          name: spotifyglass-tweak
+          path: |
+            out/spotifyglass.dylib
+            out/spotifyglass.plist
+            out/*.deb
+          if-no-files-found: warn
 
       - name: Upload to filebin.net
         if: inputs.upload_method != 'artifacts'

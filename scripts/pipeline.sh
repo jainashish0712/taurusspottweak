@@ -101,6 +101,11 @@ fi
 env -u MAKELEVEL gmake -C "$ROOT/tweak" clean package >/dev/null
 TWEAK_DEB="$(ls -t "$ROOT"/tweak/packages/*.deb | head -1)"
 echo "    $TWEAK_DEB"
+DYLIB="$(find "$ROOT/tweak/.theos" -name "spotifyglass.dylib" 2>/dev/null | head -1)"
+if [ -n "$DYLIB" ] && [ -f "$DYLIB" ]; then
+  cp "$DYLIB" "$ROOT/out/spotifyglass.dylib"
+  [ -f "$ROOT/tweak/spotifyglass.plist" ] && cp "$ROOT/tweak/spotifyglass.plist" "$ROOT/out/spotifyglass.plist"
+fi
 
 FILES=("$TWEAK_DEB")
 [ -n "$DOWNLOADS_DYLIB" ] && FILES+=("$DOWNLOADS_DYLIB")

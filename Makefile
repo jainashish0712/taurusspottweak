@@ -16,11 +16,22 @@ FLEX_ARG := $(if $(filter 0,$(FLEX)),--no-flex,)
 DEV_NAME ?= Taurus.dev
 DEV_ICON ?= docs/icon.png
 
-.PHONY: build release install trees session log flags
+.PHONY: build release install trees session log flags tweak
 build:    ## FLEX + glass IPA into out/
 	bash ./scripts/pipeline.sh $(IPA) $(SAFARI_ARG)
 release:  ## glass only, no FLEX
 	bash ./scripts/pipeline.sh $(IPA) $(SAFARI_ARG) --no-flex
+tweak:    ## build spotifyglass.dylib and .deb only into out/ (no IPA)
+	@mkdir -p out
+	@if [ ! -f tweak/Sources/Shared/Flags/SGFlagList.m ]; then \
+		mkdir -p tweak/Sources/Shared/Flags; \
+		printf '// Stub\n#import "Flags.h"\n\nconst SGFlagDef SGFlagTable[] = {};\nconst NSUInteger SGFlagCount = 0;\n' > tweak/Sources/Shared/Flags/SGFlagList.m; \
+	fi
+	env -u MAKELEVEL gmake -C tweak clean package
+	@cp "$$(find tweak/.theos -name 'spotifyglass.dylib' | head -1)" out/spotifyglass.dylib
+	@[ -f tweak/spotifyglass.plist ] && cp tweak/spotifyglass.plist out/spotifyglass.plist || true
+	@cp tweak/packages/*.deb out/ 2>/dev/null || true
+	@echo "==> tweak built into out/spotifyglass.dylib"
 install:  ## build, sign with your certificate, push to the phone on USB (FLEX=1 to take FLEX too)
 	bash ./scripts/pipeline.sh $(IPA) $(SAFARI_ARG) --install $(FLEX_ARG) --name "$(DEV_NAME)" --icon "$(DEV_ICON)" -o out/Taurus.dev.ipa
 trees:    ## record per-screen view trees into trees/ (needs a FLEX build on the phone)
