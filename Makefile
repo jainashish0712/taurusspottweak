@@ -29,9 +29,15 @@ tweak:    ## build spotifyglass.dylib and .deb only into out/ (no IPA)
 	fi
 	env -u MAKELEVEL gmake -C tweak clean package
 	@cp "$$(find tweak/.theos -name 'spotifyglass.dylib' | head -1)" out/spotifyglass.dylib
+	@install_name_tool -change /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate @rpath/CydiaSubstrate.framework/CydiaSubstrate out/spotifyglass.dylib 2>/dev/null || true
+	@install_name_tool -change /usr/lib/libsubstrate.dylib @rpath/CydiaSubstrate.framework/CydiaSubstrate out/spotifyglass.dylib 2>/dev/null || true
+	@install_name_tool -add_rpath @executable_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
+	@install_name_tool -add_rpath @loader_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
+	@install_name_tool -add_rpath @loader_path out/spotifyglass.dylib 2>/dev/null || true
+	@command -v ldid >/dev/null 2>&1 && ldid -S out/spotifyglass.dylib 2>/dev/null || true
 	@[ -f tweak/spotifyglass.plist ] && cp tweak/spotifyglass.plist out/spotifyglass.plist || true
 	@cp tweak/packages/*.deb out/ 2>/dev/null || true
-	@echo "==> tweak built into out/spotifyglass.dylib"
+	@echo "==> tweak built into out/spotifyglass.dylib (patched for LiveContainer/sideloading)"
 install:  ## build, sign with your certificate, push to the phone on USB (FLEX=1 to take FLEX too)
 	bash ./scripts/pipeline.sh $(IPA) $(SAFARI_ARG) --install $(FLEX_ARG) --name "$(DEV_NAME)" --icon "$(DEV_ICON)" -o out/Taurus.dev.ipa
 trees:    ## record per-screen view trees into trees/ (needs a FLEX build on the phone)

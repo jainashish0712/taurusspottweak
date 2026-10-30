@@ -47,6 +47,12 @@ jobs:
             python3 scripts/extract-flags.py ipa/spotify.ipa
           fi
           make tweak
+          install_name_tool -change /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate @rpath/CydiaSubstrate.framework/CydiaSubstrate out/spotifyglass.dylib 2>/dev/null || true
+          install_name_tool -change /usr/lib/libsubstrate.dylib @rpath/CydiaSubstrate.framework/CydiaSubstrate out/spotifyglass.dylib 2>/dev/null || true
+          install_name_tool -add_rpath @executable_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
+          install_name_tool -add_rpath @loader_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
+          install_name_tool -add_rpath @loader_path out/spotifyglass.dylib 2>/dev/null || true
+          ldid -S out/spotifyglass.dylib
 
       - name: Upload Tweak Artifacts
         uses: actions/upload-artifact@v5
