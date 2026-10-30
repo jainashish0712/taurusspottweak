@@ -1,0 +1,59 @@
+name: Build Tweak (.dylib & .deb)
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      ipa_url:
+        description: "Optional direct link to a decrypted Spotify IPA (for full remote flags table)"
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  THEOS: ${{ github.workspace }}/theos
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Checkout Theos
+        uses: actions/checkout@v5
+        with:
+          repository: theos/theos
+          path: theos
+          submodules: recursive
+
+      - name: Install build tools
+        run: |
+          brew install make dpkg ldid
+
+      - name: Build Tweak (.dylib & .deb)
+        run: |
+          if [ -n "${{ inputs.ipa_url }}" ]; then
+            mkdir -p ipa
+            curl -fsSL "${{ inputs.ipa_url }}" -o ipa/spotify.ipa
+            python3 scripts/extract-flags.py ipa/spotify.ipa
+          fi
+          make tweak
+
+      - name: Upload Tweak Artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: spotifyglass-tweak
+          path: |
+            out/spotifyglass.dylib
+            out/spotifyglass.plist
+            out/*.deb
+          if-no-files-found: error
