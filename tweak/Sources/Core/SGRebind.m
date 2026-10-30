@@ -3,16 +3,54 @@
 #import <mach-o/loader.h>
 #import <mach-o/nlist.h>
 #import <string.h>
+#import <strings.h>
 #import "SGRebind.h"
 #import "SGLog.h"
 
-static const struct mach_header_64 *mainExecutable(intptr_t *slide) {
-    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
-        const struct mach_header *header = _dyld_get_image_header(i);
-        if (header->magic != MH_MAGIC_64 || header->filetype != MH_EXECUTE) continue;
-        *slide = _dyld_get_image_vmaddr_slide(i);
-        return (const struct mach_header_64 *)header;
+const struct mach_header_64 *SGSpotifyExecutable(intptr_t *slide) {
+    intptr_t dummy = 0;
+    if (!slide) slide = &dummy;
+
+    uint32_t count = _dyld_image_count();
+
+    // 1. Look for Spotify's binary by image name across loaded images.
+    // Handles LiveContainer (where Spotify is loaded via dlopen as MH_DYLIB) as well as normal iOS.
+    for (uint32_t i = 0; i < count; i++) {
+        const char *name = _dyld_get_image_name(i);
+        if (!name) continue;
+        const char *slash = strrchr(name, '/');
+        const char *base = slash ? slash + 1 : name;
+        if (strcasecmp(base, "Spotify") == 0 || strstr(name, "/Spotify.app/") != NULL) {
+            const struct mach_header *header = _dyld_get_image_header(i);
+            if (header && header->magic == MH_MAGIC_64) {
+                *slide = _dyld_get_image_vmaddr_slide(i);
+                return (const struct mach_header_64 *)header;
+            }
+        }
     }
+
+    // 2. In containerized environments, find any non-LiveContainer app executable.
+    for (uint32_t i = 0; i < count; i++) {
+        const char *name = _dyld_get_image_name(i);
+        if (!name) continue;
+        if (strstr(name, ".app/") != NULL && strstr(name, "LiveContainer.app") == NULL) {
+            const struct mach_header *header = _dyld_get_image_header(i);
+            if (header && header->magic == MH_MAGIC_64) {
+                *slide = _dyld_get_image_vmaddr_slide(i);
+                return (const struct mach_header_64 *)header;
+            }
+        }
+    }
+
+    // 3. Fallback to MH_EXECUTE for standard standalone processes.
+    for (uint32_t i = 0; i < count; i++) {
+        const struct mach_header *header = _dyld_get_image_header(i);
+        if (header && header->magic == MH_MAGIC_64 && header->filetype == MH_EXECUTE) {
+            *slide = _dyld_get_image_vmaddr_slide(i);
+            return (const struct mach_header_64 *)header;
+        }
+    }
+
     return NULL;
 }
 
@@ -31,8 +69,11 @@ static BOOL writeSlot(void **slot, void *value, BOOL readOnly) {
 
 BOOL SGRebindImport(const char *symbol, void *replacement, void **original) {
     intptr_t slide = 0;
-    const struct mach_header_64 *header = mainExecutable(&slide);
-    if (!header) return NO;
+    const struct mach_header_64 *header = SGSpotifyExecutable(&slide);
+    if (!header) {
+        SGLog(@"rebind: could not find Spotify executable header for symbol %s", symbol);
+        return NO;
+    }
 
     const struct segment_command_64 *linkedit = NULL;
     const struct symtab_command *symtab = NULL;
@@ -65,7 +106,10 @@ BOOL SGRebindImport(const char *symbol, void *replacement, void **original) {
             break;
         }
     }
-    if (wanted == UINT32_MAX) return NO;
+    if (wanted == UINT32_MAX) {
+        SGLog(@"rebind: symbol _%s not found in Spotify undefined imports", symbol);
+        return NO;
+    }
 
     BOOL rebound = NO;
     command = (const struct load_command *)(header + 1);
@@ -89,6 +133,9 @@ BOOL SGRebindImport(const char *symbol, void *replacement, void **original) {
                 rebound = YES;
             }
         }
+    }
+    if (!rebound) {
+        SGLog(@"rebind: symbol _%s found in symtab but no slot was rebound", symbol);
     }
     return rebound;
 }

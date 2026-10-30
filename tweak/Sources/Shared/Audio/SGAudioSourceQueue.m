@@ -1,5 +1,6 @@
 #import "SGAudioSourceQueue.h"
 #import "Core/SGLog.h"
+#import "Core/SGRebind.h"
 #import <mach/mach.h>
 #import <mach-o/dyld.h>
 #include <string.h>
@@ -35,7 +36,8 @@ void SGAudioSourceQueueInitialize(void) {
     sg_sourceLayout = false;
     sg_sourceSpotify90 = false;
     atomic_store(&sg_sourceProbeLogged, false);
-    const struct mach_header_64 *header = (const void *)_dyld_get_image_header(0);
+    intptr_t slide = 0;
+    const struct mach_header_64 *header = SGSpotifyExecutable(&slide);
     if (!header || header->magic != MH_MAGIC_64) return;
     const struct load_command *command = (const void *)(header + 1);
     for (uint32_t i = 0; i < header->ncmds; i++, command = (const void *)((const char *)command + command->cmdsize)) {
