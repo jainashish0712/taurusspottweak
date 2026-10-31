@@ -149,7 +149,10 @@ static UITableViewCell *tiledCell(UITableView *table, NSString *title, NSString 
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    _footer = SGNote(@"Choosing a file uses it straight away. Swipe left on one to delete it.");
+    NSString *footerText = _kind == SGDSPFileLiveprog
+        ? @"Choosing a script uses it straight away. Sliders appear under Liveprog on the Audio effects page. Swipe left on one to delete it."
+        : @"Choosing a file uses it straight away. Swipe left on one to delete it.";
+    _footer = SGNote(footerText);
     self.tableView.tableFooterView = _footer;
 }
 

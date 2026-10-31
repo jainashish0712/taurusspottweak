@@ -123,6 +123,22 @@ static bool hasCode(const char *p, const char *end) {
     return false;
 }
 
+static bool isSliderOrHeader(const char *p, const char *end) {
+    while (p < end && (*p == ' ' || *p == '\t')) p++;
+    if (p >= end || *p == '\r' || *p == '\n') return true;
+    if (p[0] == '/' && p + 1 < end && (p[1] == '/' || p[1] == '*')) return true;
+    static const char *tags[] = {"desc:", "filename:", "author:", "version:", "tags:", "in_pin:", "out_pin:"};
+    for (size_t i = 0; i < sizeof(tags)/sizeof(*tags); i++) {
+        size_t len = strlen(tags[i]);
+        if (end - p >= (long)len && !strncasecmp(p, tags[i], len)) return true;
+    }
+    const char *colon = memchr(p, ':', (size_t)(end - p));
+    const char *lt = memchr(p, '<', (size_t)(end - p));
+    const char *gt = memchr(p, '>', (size_t)(end - p));
+    if (colon && lt && gt && colon < lt && lt < gt) return true;
+    return false;
+}
+
 NSArray<SGDSPLiveprogSlider *> *SGDSPLiveprogParseSliders(NSString *scriptName, const char *script) {
     if (!script) return @[];
     NSString *cleanName = scriptName.lastPathComponent.stringByDeletingPathExtension ?: @"default";
@@ -138,123 +154,123 @@ NSArray<SGDSPLiveprogSlider *> *SGDSPLiveprogParseSliders(NSString *scriptName, 
         // Stop if a section marker like @init or @sample begins
         if (*p == '@') break;
 
-        bool isComment = false;
+        // Strip leading //
         if (p + 1 < end && p[0] == '/' && p[1] == '/') {
-            isComment = true;
             p += 2;
             while (p < end && (*p == ' ' || *p == '\t')) p++;
         }
 
-        // Check for slider declaration: sliderN:... or name:...
-        NSInteger num = 0;
-        char varName[64] = {0};
-        char aliasName[64] = {0};
+        const char *colon = memchr(p, ':', (size_t)(end - p));
+        const char *lt = memchr(p, '<', (size_t)(end - p));
+        const char *gt = memchr(p, '>', (size_t)(end - p));
 
-        if (!strncmp(p, "slider", 6) && isdigit((unsigned char)p[6])) {
-            const char *digits = p + 6;
-            while (digits < end && isdigit((unsigned char)*digits)) num = num * 10 + (*digits++ - '0');
-            if (digits < end && *digits == ':') {
-                snprintf(aliasName, sizeof aliasName, "slider%ld", (long)num);
-                p = digits + 1;
-                while (p < end && (*p == ' ' || *p == '\t')) p++;
-                // Check for optional var= after sliderN:
-                const char *eq = memchr(p, '=', (size_t)(end - p));
-                const char *lt = memchr(p, '<', (size_t)(end - p));
-                if (eq && (!lt || eq < lt) && eq - p < (long)sizeof varName) {
-                    size_t len = (size_t)(eq - p);
-                    memcpy(varName, p, len);
-                    varName[len] = 0;
-                    p = eq + 1;
-                } else {
-                    snprintf(varName, sizeof varName, "slider%ld", (long)num);
-                    aliasName[0] = 0;
+        if (colon && lt && gt && colon < lt && lt < gt) {
+            const char *idStart = p;
+            const char *idEnd = colon;
+            while (idStart < idEnd && (*idStart == ' ' || *idStart == '\t')) idStart++;
+            while (idEnd > idStart && (idEnd[-1] == ' ' || idEnd[-1] == '\t')) idEnd--;
+
+            if (idEnd > idStart) {
+                char idBuf[64] = {0};
+                size_t idLen = MIN((size_t)(idEnd - idStart), sizeof(idBuf) - 1);
+                memcpy(idBuf, idStart, idLen);
+                idBuf[idLen] = 0;
+
+                NSInteger num = 0;
+                char varName[64] = {0};
+                char aliasName[64] = {0};
+                const char *valStart = colon + 1;
+
+                if (!strncmp(idBuf, "slider", 6) && isdigit((unsigned char)idBuf[6])) {
+                    num = atoi(idBuf + 6);
+                    snprintf(aliasName, sizeof aliasName, "slider%ld", (long)num);
+                    const char *eq = memchr(valStart, '=', (size_t)(lt - valStart));
+                    if (eq) {
+                        const char *vStart = valStart;
+                        const char *vEnd = eq;
+                        while (vStart < vEnd && (*vStart == ' ' || *vStart == '\t')) vStart++;
+                        while (vEnd > vStart && (vEnd[-1] == ' ' || vEnd[-1] == '\t')) vEnd--;
+                        size_t vLen = MIN((size_t)(vEnd - vStart), sizeof(varName) - 1);
+                        memcpy(varName, vStart, vLen);
+                        varName[vLen] = 0;
+                        valStart = eq + 1;
+                    } else {
+                        snprintf(varName, sizeof varName, "slider%ld", (long)num);
+                        aliasName[0] = 0;
+                    }
+                } else if (isalpha((unsigned char)idBuf[0]) || idBuf[0] == '_') {
+                    num = nextSequential++;
+                    snprintf(aliasName, sizeof aliasName, "slider%ld", (long)num);
+                    memcpy(varName, idBuf, sizeof(varName) - 1);
                 }
-            } else {
-                num = 0;
-            }
-        } else if (isComment && isalpha((unsigned char)*p)) {
-            // Comment slider: //name:default<min,max,step>Label
-            const char *colon = memchr(p, ':', (size_t)(end - p));
-            const char *lt = memchr(p, '<', (size_t)(end - p));
-            if (colon && lt && colon < lt && colon - p < (long)sizeof varName) {
-                size_t len = (size_t)(colon - p);
-                memcpy(varName, p, len);
-                varName[len] = 0;
-                num = nextSequential++;
-                snprintf(aliasName, sizeof aliasName, "slider%ld", (long)num);
-                p = colon + 1;
-            }
-        }
 
-        if (varName[0]) {
-            while (p < end && (*p == ' ' || *p == '\t')) p++;
-            char *afterVal = NULL;
-            double defVal = strtod(p, &afterVal);
-            if (afterVal != p && afterVal < end && *afterVal == '<') {
-                p = afterVal + 1;
-                while (p < end && (*p == ' ' || *p == '\t')) p++;
-                double minVal = strtod(p, &afterVal);
-                if (afterVal != p && afterVal < end && *afterVal == ',') {
-                    p = afterVal + 1;
-                    while (p < end && (*p == ' ' || *p == '\t')) p++;
-                    double maxVal = strtod(p, &afterVal);
+                if (varName[0]) {
+                    while (valStart < lt && (*valStart == ' ' || *valStart == '\t')) valStart++;
+                    char *afterVal = NULL;
+                    double defVal = strtod(valStart, &afterVal);
+
+                    const char *bPtr = lt + 1;
+                    while (bPtr < gt && (*bPtr == ' ' || *bPtr == '\t')) bPtr++;
+                    double minVal = strtod(bPtr, &afterVal);
+                    double maxVal = minVal;
                     double stepVal = 1.0;
                     NSMutableArray<NSString *> *options = nil;
-                    p = afterVal;
-                    while (p < end && (*p == ' ' || *p == '\t')) p++;
-                    if (p < end && *p == ',') {
-                        p++;
-                        while (p < end && (*p == ' ' || *p == '\t')) p++;
-                        char *afterStep = NULL;
-                        double parsedStep = strtod(p, &afterStep);
-                        if (afterStep != p) {
-                            stepVal = parsedStep;
-                            p = afterStep;
-                        }
-                        while (p < end && (*p == ' ' || *p == '\t')) p++;
-                        if (p < end && *p == '{') {
-                            p++;
-                            const char *brace = memchr(p, '}', (size_t)(end - p));
-                            if (brace) {
-                                options = [NSMutableArray array];
-                                const char *cur = p;
-                                while (cur < brace) {
-                                    const char *comma = memchr(cur, ',', (size_t)(brace - cur));
-                                    size_t optLen = comma ? (size_t)(comma - cur) : (size_t)(brace - cur);
-                                    NSString *opt = [[NSString alloc] initWithBytes:cur length:optLen encoding:NSUTF8StringEncoding];
-                                    opt = [opt stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
-                                    if (opt.length) [options addObject:opt];
-                                    cur = comma ? comma + 1 : brace;
+
+                    if (afterVal && afterVal < gt && *afterVal == ',') {
+                        bPtr = afterVal + 1;
+                        while (bPtr < gt && (*bPtr == ' ' || *bPtr == '\t')) bPtr++;
+                        maxVal = strtod(bPtr, &afterVal);
+                        if (afterVal && afterVal < gt && *afterVal == ',') {
+                            bPtr = afterVal + 1;
+                            while (bPtr < gt && (*bPtr == ' ' || *bPtr == '\t')) bPtr++;
+                            char *afterStep = NULL;
+                            double s = strtod(bPtr, &afterStep);
+                            if (afterStep != bPtr) {
+                                stepVal = s;
+                                bPtr = afterStep;
+                            }
+                            while (bPtr < gt && (*bPtr == ' ' || *bPtr == '\t')) bPtr++;
+                            if (bPtr < gt && *bPtr == '{') {
+                                bPtr++;
+                                const char *brace = memchr(bPtr, '}', (size_t)(gt - bPtr));
+                                if (brace) {
+                                    options = [NSMutableArray array];
+                                    const char *cur = bPtr;
+                                    while (cur < brace) {
+                                        const char *comma = memchr(cur, ',', (size_t)(brace - cur));
+                                        size_t optLen = comma ? (size_t)(comma - cur) : (size_t)(brace - cur);
+                                        NSString *opt = [[NSString alloc] initWithBytes:cur length:optLen encoding:NSUTF8StringEncoding];
+                                        opt = [opt stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+                                        if (opt.length) [options addObject:opt];
+                                        cur = comma ? comma + 1 : brace;
+                                    }
                                 }
-                                p = brace + 1;
                             }
                         }
                     }
-                    const char *angle = memchr(p, '>', (size_t)(end - p));
-                    if (angle) {
-                        p = angle + 1;
-                        while (p < end && (*p == ' ' || *p == '\t')) p++;
-                        const char *labelEnd = end;
-                        while (labelEnd > p && ((unsigned char)labelEnd[-1] <= ' ' || labelEnd[-1] == '\r')) labelEnd--;
-                        NSString *label = labelEnd > p ? [[NSString alloc] initWithBytes:p length:(size_t)(labelEnd - p) encoding:NSUTF8StringEncoding] : nil;
-                        if (!label.length) label = [NSString stringWithUTF8String:varName];
 
-                        SGDSPLiveprogSlider *slider = [SGDSPLiveprogSlider new];
-                        slider.index = num ? num : nextSequential++;
-                        slider.name = [NSString stringWithUTF8String:varName];
-                        if (aliasName[0] && strcmp(varName, aliasName) != 0) slider.alias = [NSString stringWithUTF8String:aliasName];
-                        slider.defaultValue = defVal;
-                        slider.minValue = minVal;
-                        slider.maxValue = maxVal;
-                        slider.step = stepVal > 0 ? stepVal : 1.0;
-                        slider.options = options;
-                        slider.label = label;
-                        slider.key = [NSString stringWithFormat:@"spotifyglass.dsp.liveprog.slider.%@.%ld", cleanName, (long)slider.index];
+                    const char *lblStart = gt + 1;
+                    while (lblStart < end && (*lblStart == ' ' || *lblStart == '\t')) lblStart++;
+                    const char *lblEnd = end;
+                    while (lblEnd > lblStart && ((unsigned char)lblEnd[-1] <= ' ' || lblEnd[-1] == '\r')) lblEnd--;
+                    NSString *label = lblEnd > lblStart ? [[NSString alloc] initWithBytes:lblStart length:(size_t)(lblEnd - lblStart) encoding:NSUTF8StringEncoding] : nil;
+                    if (!label.length) label = [NSString stringWithUTF8String:varName];
 
-                        SGDSPRegisterRange(slider.key, (SGDSPRange){minVal, maxVal, slider.step, defVal});
-                        [sliders addObject:slider];
-                        if (num >= nextSequential) nextSequential = num + 1;
-                    }
+                    SGDSPLiveprogSlider *slider = [SGDSPLiveprogSlider new];
+                    slider.index = num ? num : nextSequential++;
+                    slider.name = [NSString stringWithUTF8String:varName];
+                    if (aliasName[0] && strcmp(varName, aliasName) != 0) slider.alias = [NSString stringWithUTF8String:aliasName];
+                    slider.defaultValue = defVal;
+                    slider.minValue = minVal;
+                    slider.maxValue = maxVal;
+                    slider.step = stepVal > 0 ? stepVal : 1.0;
+                    slider.options = options;
+                    slider.label = label;
+                    slider.key = [NSString stringWithFormat:@"spotifyglass.dsp.liveprog.slider.%@.%ld", cleanName, (long)slider.index];
+
+                    SGDSPRegisterRange(slider.key, (SGDSPRange){minVal, maxVal, slider.step, defVal});
+                    [sliders addObject:slider];
+                    if (num >= nextSequential) nextSequential = num + 1;
                 }
             }
         }
@@ -288,7 +304,7 @@ static bool compile(SGDSPLiveprog *liveprog, const char *script, const char *scr
                 starts[current] = *end ? end + 1 : end;
                 lines[current] = number;
             }
-        } else if (current < 0 && !preCodeStart && hasCode(text, end) && strncmp(text, "slider", 6) != 0) {
+        } else if (current < 0 && !preCodeStart && hasCode(text, end) && !isSliderOrHeader(text, end)) {
             preCodeStart = line;
         }
         line = *end ? end + 1 : end;
@@ -379,6 +395,12 @@ SGDSPLiveprog *SGDSPLiveprogCreate(const char *script, const char *scriptName, d
     }
     NSEEL_VM_preallocram(liveprog->vm, -1);
     if (liveprog->code[SectionInit]) NSEEL_code_execute(liveprog->code[SectionInit]);
+    // Apply user slider values after @init to override any default assignments inside @init
+    for (SGDSPLiveprogSlider *s in liveprog->sliders) {
+        double val = SGDSPNumber(s.key);
+        *NSEEL_VM_regvar(liveprog->vm, s.name.UTF8String) = val;
+        if (s.alias.length) *NSEEL_VM_regvar(liveprog->vm, s.alias.UTF8String) = val;
+    }
     if (liveprog->code[SectionSlider]) NSEEL_code_execute(liveprog->code[SectionSlider]);
     return liveprog;
 }

@@ -167,5 +167,8 @@ NSArray<SGDSPLiveprogSlider *> *SGDSPLiveprogCurrentSliders(void) {
     NSString *path = [directory stringByAppendingPathComponent:fileName];
     NSData *data = [NSData dataWithContentsOfFile:path];
     if (!data.length) return @[];
-    return SGDSPLiveprogParseSliders(fileName, data.bytes);
+    NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]
+                     ?: [[NSString alloc] initWithData:data encoding:NSISOLatin1StringEncoding];
+    if (!text.length) return @[];
+    return SGDSPLiveprogParseSliders(fileName, text.UTF8String);
 }

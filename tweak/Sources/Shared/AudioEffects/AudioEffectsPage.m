@@ -700,6 +700,7 @@ static UIView *valueAndChevron(NSString *text) {
     NSInteger section = toggle.tag;
     SGDSPEffect *e = [self effectIn:section];
     if (!e.key) return;
+    if ([e.key isEqualToString:SGKeyDSPLiveprog]) e.rows = liveprogRows();
     SGDSPSetSwitch(e.key, toggle.on);
     UITableView *table = self.tableView;
     NSInteger before = [self rowCountOf:e];
