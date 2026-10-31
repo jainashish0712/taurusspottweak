@@ -233,12 +233,11 @@ static UIFont *tabular(UIFont *font) {
 @end
 
 // The title and the value over a slider in the accent colour, storing each step as the thumb reaches it.
-@interface SGDSPSliderCell : UITableViewCell
-- (void)showRow:(SGDSPRow *)row;
-@end
-
 @implementation SGDSPSliderCell {
     SGDSPRow *_row;
+    NSString *_key;
+    NSString *_unit;
+    NSInteger _tag;
     UILabel *_title, *_value;
     SGDSPSlider *_slider;
     double _shown;
@@ -263,26 +262,43 @@ static UIFont *tabular(UIFont *font) {
     return self;
 }
 
-- (void)showRow:(SGDSPRow *)row {
-    _row = row;
-    SGDSPRange range = SGDSPRangeFor(row.key);
+- (void)showSlider:(NSString *)title key:(NSString *)key unit:(NSString *)unit tag:(NSInteger)tag {
+    _key = key;
+    _unit = unit ?: @"";
+    _tag = tag;
+    SGDSPRange range = SGDSPRangeFor(key);
     NSInteger count = range.step > 0 ? (NSInteger)lround((range.max - range.min) / range.step) : 0;
     _detents = count > 0 && count <= 24;
     _title.font = SGTitleFont();
     _value.font = tabular(SGTitleFont());
-    _title.text = row.title;
+    _title.text = title;
     _slider.minimumTrackTintColor = SGGreen();
     _slider.minimumValue = (float)range.min;
     _slider.maximumValue = (float)range.max;
-    _slider.spokenStep = (float)(count > 0 && count <= 40 ? range.step : snapped(row.key, range.min + (range.max - range.min) / 20) - range.min);
-    _shown = SGDSPNumber(row.key);
+    _slider.spokenStep = (float)(count > 0 && count <= 40 ? range.step : snapped(key, range.min + (range.max - range.min) / 20) - range.min);
+    _shown = SGDSPNumber(key);
     _slider.value = (float)_shown;
-    _slider.accessibilityLabel = row.title;
+    _slider.accessibilityLabel = title;
     [self showValue];
 }
 
+- (void)showRow:(SGDSPRow *)row {
+    _row = row;
+    [self showSlider:row.title key:row.key unit:row.unit tag:row.tag];
+}
+
 - (void)showValue {
-    _value.text = numberText(_row, _shown);
+    if (_row) {
+        _value.text = numberText(_row, _shown);
+    } else {
+        SGDSPRange range = SGDSPRangeFor(_key);
+        double step = range.step;
+        int decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3;
+        if (fabs(_shown - round(_shown)) < 1e-6) decimals = 0;
+        NSString *number = [NSString stringWithFormat:@"%.*f", decimals, fabs(_shown)];
+        NSString *sign = number.doubleValue == 0 ? @"" : _shown < 0 ? @"−" : range.min < 0 && range.max > 0 ? @"+" : @"";
+        _value.text = [NSString stringWithFormat:@"%@%@%@", sign, number, _unit ?: @""];
+    }
     _slider.accessibilityValue = _value.text;
     [self setNeedsLayout];
 }
@@ -298,13 +314,15 @@ static UIFont *tabular(UIFont *font) {
 }
 
 - (void)moved {
-    double value = snapped(_row.key, _slider.value);
+    NSString *key = _row ? _row.key : _key;
+    NSInteger tag = _row ? _row.tag : _tag;
+    double value = snapped(key, _slider.value);
     if (_detents) _slider.value = (float)value;
     if (value == _shown) return;
     _shown = value;
-    SGDSPSetNumber(_row.key, value);
-    if ([_row.key hasPrefix:SGKeyDSPLiveprogSliderPrefix]) {
-        SGDSPSetLiveprogSlider((int)_row.tag, value);
+    SGDSPSetNumber(key, value);
+    if ([key hasPrefix:SGKeyDSPLiveprogSliderPrefix]) {
+        SGDSPSetLiveprogSlider((int)tag, value);
     }
     [self showValue];
 }

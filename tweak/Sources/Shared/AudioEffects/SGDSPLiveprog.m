@@ -7,6 +7,7 @@
 #import <stdlib.h>
 #import <string.h>
 #import "ns-eel.h"
+#import "ns-eel-addfuncs.h"
 
 @implementation SGDSPLiveprogSlider
 @end
@@ -44,11 +45,6 @@ __attribute__((visibility("hidden"))) void NSEEL_HOSTSTUB_LeaveMutex(void) {
 
 static void *gmemCalloc(size_t count, size_t size) {
     return rendering() ? NULL : calloc(count, size);
-}
-
-static void start(void) {
-    nseel_gmem_calloc = gmemCalloc;
-    NSEEL_init();
 }
 
 static void copyError(char *error, size_t size, const char *text) {
@@ -99,6 +95,84 @@ static EEL_F onNamedString(void *caller_this, const char *name) {
     int id = lp->stringCount++;
     lp->strings[id] = strdup(name);
     return (EEL_F)id;
+}
+
+static EEL_F NSEEL_CGEN_CALL eel_importFLTFromStr(void *caller_this, INT_PTR np, EEL_F **parms) {
+    if (!caller_this || np < 2 || !parms || !parms[0] || !parms[1]) return 0;
+    SGDSPLiveprog *lp = (SGDSPLiveprog *)caller_this;
+    int strId = (int)(*parms[0]);
+    if (strId < 0 || strId >= lp->stringCount || !lp->strings[strId]) return 0;
+    const char *str = lp->strings[strId];
+    unsigned int dest = (unsigned int)MAX(0.0, *parms[1]);
+
+    int count = 0;
+    const char *p = str;
+    while (*p) {
+        while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n' || *p == ',' || *p == ';')) p++;
+        if (!*p) break;
+        char *end = NULL;
+        double val = strtod(p, &end);
+        if (end == p) {
+            p++;
+            continue;
+        }
+        p = end;
+        EEL_F *slot = NSEEL_VM_getramptr(lp->vm, dest + (unsigned int)count, NULL);
+        if (slot) *slot = (EEL_F)val;
+        count++;
+    }
+    return (EEL_F)count;
+}
+
+static EEL_F NSEEL_CGEN_CALL eel_printf(void *caller_this, INT_PTR np, EEL_F **parms) {
+    if (!caller_this || np < 1 || !parms || !parms[0]) return 0;
+    SGDSPLiveprog *lp = (SGDSPLiveprog *)caller_this;
+    int strId = (int)(*parms[0]);
+    const char *fmt = (strId >= 0 && strId < lp->stringCount) ? lp->strings[strId] : NULL;
+    if (!fmt) return 0;
+    char buf[512];
+    int argIdx = 1;
+    char *out = buf;
+    char *outEnd = buf + sizeof(buf) - 1;
+    for (const char *p = fmt; *p && out < outEnd;) {
+        if (*p == '%' && p[1]) {
+            p++;
+            if (*p == '%') {
+                *out++ = '%';
+                p++;
+            } else if (argIdx < np && parms[argIdx]) {
+                double val = *parms[argIdx++];
+                int written = 0;
+                if (*p == 'd' || *p == 'i') written = snprintf(out, (size_t)(outEnd - out), "%ld", (long)val);
+                else if (*p == 'u') written = snprintf(out, (size_t)(outEnd - out), "%lu", (unsigned long)val);
+                else if (*p == 'x' || *p == 'X') written = snprintf(out, (size_t)(outEnd - out), "%lx", (long)val);
+                else if (*p == 'c') written = snprintf(out, (size_t)(outEnd - out), "%c", (char)val);
+                else written = snprintf(out, (size_t)(outEnd - out), "%g", val);
+                if (written > 0) out += MIN(written, (int)(outEnd - out));
+                p++;
+            } else {
+                p++;
+            }
+        } else {
+            *out++ = *p++;
+        }
+    }
+    *out = '\0';
+    if (out > buf && out[-1] == '\n') out[-1] = '\0';
+    SGLog(@"dsp: [liveprog] %s", buf);
+    return 0;
+}
+
+static EEL_F NSEEL_CGEN_CALL eel_breakpoint(void *caller_this, INT_PTR np, EEL_F **parms) {
+    return 0;
+}
+
+static void start(void) {
+    nseel_gmem_calloc = gmemCalloc;
+    NSEEL_init();
+    NSEEL_addfunc_varparm_ex("importFLTFromStr", 2, 1, NSEEL_PProc_THIS, eel_importFLTFromStr, NULL);
+    NSEEL_addfunc_varparm_ex("printf", 1, 0, NSEEL_PProc_THIS, eel_printf, NULL);
+    NSEEL_addfunc_varparm_ex("breakpoint", 0, 1, NSEEL_PProc_THIS, eel_breakpoint, NULL);
 }
 
 static bool hasCode(const char *p, const char *end) {
@@ -380,6 +454,7 @@ SGDSPLiveprog *SGDSPLiveprogCreate(const char *script, const char *scriptName, d
         return NULL;
     }
     NSEEL_VM_SetStringFunc(liveprog->vm, onString, onNamedString);
+    NSEEL_VM_SetCustomFuncThis(liveprog->vm, liveprog);
     NSEEL_VM_SetGRAM(liveprog->vm, &liveprog->gram);
     NSEEL_VM_setramsize(liveprog->vm, kMemory);
     liveprog->spl0 = NSEEL_VM_regvar(liveprog->vm, "spl0");

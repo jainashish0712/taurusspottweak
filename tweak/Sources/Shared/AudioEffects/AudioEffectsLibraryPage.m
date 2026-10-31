@@ -136,6 +136,7 @@ static UITableViewCell *tiledCell(UITableView *table, NSString *title, NSString 
 @implementation SGDSPFilesPage {
     SGDSPFileKind _kind;
     NSArray<NSString *> *_files;
+    NSArray<SGDSPLiveprogSlider *> *_sliders;
     UIView *_footer;
 }
 
@@ -149,10 +150,7 @@ static UITableViewCell *tiledCell(UITableView *table, NSString *title, NSString 
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSString *footerText = _kind == SGDSPFileLiveprog
-        ? @"Choosing a script uses it straight away. Sliders appear under Liveprog on the Audio effects page. Swipe left on one to delete it."
-        : @"Choosing a file uses it straight away. Swipe left on one to delete it.";
-    _footer = SGNote(footerText);
+    _footer = SGNote(@"Choosing a file uses it straight away. Swipe left on one to delete it.");
     self.tableView.tableFooterView = _footer;
 }
 
@@ -163,22 +161,51 @@ static UITableViewCell *tiledCell(UITableView *table, NSString *title, NSString 
 
 - (void)viewWillAppear:(BOOL)animated {
     _files = SGDSPLibraryFiles(_kind);
+    if (_kind == SGDSPFileLiveprog) _sliders = SGDSPLiveprogCurrentSliders();
     [super viewWillAppear:animated];
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)table {
+    if (_kind == SGDSPFileLiveprog && _sliders.count > 0) return 4;
     return 3;
+}
+
+- (NSString *)tableView:(UITableView *)table titleForHeaderInSection:(NSInteger)section {
+    if (_kind == SGDSPFileLiveprog && _sliders.count > 0 && section == 2) {
+        return @"Parameters";
+    }
+    return nil;
 }
 
 - (NSInteger)tableView:(UITableView *)table numberOfRowsInSection:(NSInteger)section {
     if (section == 0) return [self errorRows];
     if (section == 1) return MAX((NSInteger)_files.count, 1);
+    if (_kind == SGDSPFileLiveprog && _sliders.count > 0) {
+        if (section == 2) return (NSInteger)_sliders.count;
+        if (section == 3) return 1;
+    }
     return 1;
+}
+
+- (CGFloat)tableView:(UITableView *)table heightForRowAtIndexPath:(NSIndexPath *)path {
+    if (_kind == SGDSPFileLiveprog && _sliders.count > 0 && path.section == 2) {
+        return 74;
+    }
+    return UITableViewAutomaticDimension;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)table cellForRowAtIndexPath:(NSIndexPath *)path {
     if (path.section == 0) return [self errorCellIn:table];
-    if (path.section == 2) {
+    if (_kind == SGDSPFileLiveprog && _sliders.count > 0 && path.section == 2) {
+        SGDSPLiveprogSlider *slider = _sliders[(NSUInteger)path.row];
+        SGDSPSliderCell *cell = [table dequeueReusableCellWithIdentifier:@"slider"]
+            ?: [[SGDSPSliderCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"slider"];
+        cell.backgroundColor = SGCardBackground();
+        [cell showSlider:slider.label key:slider.key unit:@"" tag:slider.index];
+        return cell;
+    }
+    BOOL isImport = (_kind == SGDSPFileLiveprog && _sliders.count > 0) ? (path.section == 3) : (path.section == 2);
+    if (isImport) {
         NSString *subtitle = [NSString stringWithFormat:@"A %@ file from Files", extensionList(_kind)];
         return tiledCell(table, @"Import file…", subtitle, @"square.and.arrow.down", nil);
     }
@@ -202,18 +229,27 @@ static UITableViewCell *tiledCell(UITableView *table, NSString *title, NSString 
 }
 
 - (BOOL)tableView:(UITableView *)table shouldHighlightRowAtIndexPath:(NSIndexPath *)path {
-    return path.section == 2 || (path.section == 1 && _files.count);
+    if (path.section == 0) return NO;
+    if (_kind == SGDSPFileLiveprog && _sliders.count > 0 && path.section == 2) return NO;
+    BOOL isImport = (_kind == SGDSPFileLiveprog && _sliders.count > 0) ? (path.section == 3) : (path.section == 2);
+    return isImport || (path.section == 1 && _files.count);
 }
 
 - (void)tableView:(UITableView *)table didSelectRowAtIndexPath:(NSIndexPath *)path {
     [table deselectRowAtIndexPath:path animated:YES];
-    if (path.section == 2) {
+    BOOL isImport = (_kind == SGDSPFileLiveprog && _sliders.count > 0) ? (path.section == 3) : (path.section == 2);
+    if (isImport) {
         [self pickFile];
         return;
     }
     if (path.section != 1 || !_files.count) return;
     SGDSPSetString(fileKeyOf(_kind), _files[(NSUInteger)path.row]);
-    [table reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationNone];
+    if (_kind == SGDSPFileLiveprog) {
+        _sliders = SGDSPLiveprogCurrentSliders();
+        [self.tableView reloadData];
+    } else {
+        [table reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationNone];
+    }
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)table trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)path {
@@ -234,10 +270,12 @@ static UITableViewCell *tiledCell(UITableView *table, NSString *title, NSString 
         showAlert(self, @"Could not delete the file", nil);
         return;
     }
-    if ([name isEqualToString:SGDSPString(fileKeyOf(_kind))]) SGDSPSetString(fileKeyOf(_kind), @"");
+    if ([name isEqualToString:SGDSPString(fileKeyOf(_kind))]) {
+        SGDSPSetString(fileKeyOf(_kind), @"");
+        if (_kind == SGDSPFileLiveprog) _sliders = @[];
+    }
     _files = SGDSPLibraryFiles(_kind);
-    if (_files.count) [self.tableView deleteRowsAtIndexPaths:@[path] withRowAnimation:UITableViewRowAnimationAutomatic];
-    else [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationFade];
+    [self.tableView reloadData];
 }
 
 - (void)pickFile {
@@ -261,7 +299,8 @@ static UITableViewCell *tiledCell(UITableView *table, NSString *title, NSString 
     }
     SGDSPSetString(fileKeyOf(_kind), name);
     _files = SGDSPLibraryFiles(_kind);
-    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationFade];
+    if (_kind == SGDSPFileLiveprog) _sliders = SGDSPLiveprogCurrentSliders();
+    [self.tableView reloadData];
 }
 
 @end

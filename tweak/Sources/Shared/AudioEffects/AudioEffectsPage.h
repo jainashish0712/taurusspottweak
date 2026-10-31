@@ -10,3 +10,7 @@ UIViewController *SGDSPLibraryPage(SGDSPFileKind kind);
 UIViewController *SGDSPGraphicEqPage(void);
 // The choice of a file effect's library, "None" when there is none.
 NSString *SGDSPChosenFile(SGDSPFileKind kind);
+
+@interface SGDSPSliderCell : UITableViewCell
+- (void)showSlider:(NSString *)title key:(NSString *)key unit:(NSString *)unit tag:(NSInteger)tag;
+@end
