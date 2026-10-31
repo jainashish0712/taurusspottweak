@@ -1,3 +1,4 @@
+#import "Core/SGCore.h"
 #import "AudioEffects.h"
 #import "SGDSPEffects.h"
 #import <ctype.h>
