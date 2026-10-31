@@ -344,6 +344,7 @@ in_string:
           }
           else if (c < '0' || c > '9')
           {
+            if (x == toklen - 1 && (c == 'f' || c == 'F')) x++;
             break;
           }
         }
