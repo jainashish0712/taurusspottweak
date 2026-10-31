@@ -302,6 +302,8 @@ static opcodeRec *ifElse(Parser *p) {
 
 /* expression: statements joined by ';', which may also end one. */
 static opcodeRec *expression(Parser *p) {
+    while (p->token == ';') advance(p);
+    if (!startsExpression(p->token)) return NULL;
     opcodeRec *result = ifElse(p);
     while (!p->failed && p->token == ';') {
         advance(p);
@@ -316,7 +318,13 @@ static opcodeRec *expression(Parser *p) {
 int nseelparse(compileContext *context) {
     Parser p = {.context = context};
     advance(&p);
+    while (p.token == ';') advance(&p);
+    if (p.token == 0) {
+        context->result = NULL;
+        return 0;
+    }
     opcodeRec *result = expression(&p);
+    while (!p.failed && p.token == ';') advance(&p);
     if (!p.failed && p.token != 0) fail(&p, &p.location);
     if (p.failed) return 1;
     context->result = result;

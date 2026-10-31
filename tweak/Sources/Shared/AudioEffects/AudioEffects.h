@@ -34,6 +34,7 @@
 
 #define SGKeyDSPLiveprog                @"spotifyglass.dsp.liveprog"
 #define SGKeyDSPLiveprogFile            @"spotifyglass.dsp.liveprog.file"
+#define SGKeyDSPLiveprogSliderPrefix    @"spotifyglass.dsp.liveprog.slider"
 
 #define SGKeyDSPReverb                  @"spotifyglass.dsp.reverb"
 #define SGKeyDSPReverbPreset            @"spotifyglass.dsp.reverb.preset"       // SGDSPReverbPresetNames index
@@ -56,6 +57,11 @@ typedef struct {
 } SGDSPRange;
 
 SGDSPRange SGDSPRangeFor(NSString *key);
+void SGDSPRegisterRange(NSString *key, SGDSPRange range);
+
+@class SGDSPLiveprogSlider;
+NSArray<SGDSPLiveprogSlider *> *SGDSPLiveprogCurrentSliders(void);
+void SGDSPSetLiveprogSlider(int index, double value);
 
 // Switches, numbers (clamped to their range) and strings. Setting one applies it.
 BOOL SGDSPSwitch(NSString *key);

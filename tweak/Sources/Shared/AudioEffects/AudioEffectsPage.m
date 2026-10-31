@@ -19,6 +19,7 @@ typedef NS_ENUM(NSInteger, SGDSPRowKind) {
 @property (nonatomic, copy) NSString *unit;
 @property (nonatomic, copy) NSArray<NSString *> *names;   // a choice's, or what a slider's steps read as
 @property (nonatomic) double scale;                        // what a slider's stored number is shown times
+@property (nonatomic) NSInteger tag;
 @property (nonatomic, copy) NSString *(^value)(void);
 @property (nonatomic, copy) UIViewController *(^page)(void);
 @end
@@ -70,6 +71,23 @@ static SGDSPRow *pageRow(NSString *title, NSString *(^value)(void), UIViewContro
 
 static SGDSPRow *fileRow(NSString *title, SGDSPFileKind kind) {
     return pageRow(title, ^NSString *{ return SGDSPChosenFile(kind); }, ^UIViewController *{ return SGDSPLibraryPage(kind); });
+}
+
+static NSArray<SGDSPRow *> *liveprogRows(void) {
+    NSMutableArray<SGDSPRow *> *rows = [NSMutableArray arrayWithObject:fileRow(@"Script", SGDSPFileLiveprog)];
+    NSArray<SGDSPLiveprogSlider *> *sliders = SGDSPLiveprogCurrentSliders();
+    for (SGDSPLiveprogSlider *s in sliders) {
+        if (s.options.count > 0) {
+            SGDSPRow *r = choice(s.label, s.key, s.options);
+            r.tag = s.index;
+            [rows addObject:r];
+        } else {
+            SGDSPRow *r = slider(s.label, s.key, @"");
+            r.tag = s.index;
+            [rows addObject:r];
+        }
+    }
+    return rows;
 }
 
 static SGDSPEffect *effect(NSString *key, NSString *title, NSString *subtitle, NSString *symbol, NSArray<SGDSPRow *> *rows) {
@@ -131,9 +149,7 @@ static NSArray<SGDSPEffect *> *effects(void) {
         effect(SGKeyDSPDDC, @"ViPER DDC", @"Headphone correction files", @"headphones", @[
             fileRow(@"DDC file", SGDSPFileDDC),
         ]),
-        effect(SGKeyDSPLiveprog, @"Liveprog", @"Effects written as EEL scripts", @"chevron.left.forwardslash.chevron.right", @[
-            fileRow(@"Script", SGDSPFileLiveprog),
-        ]),
+        effect(SGKeyDSPLiveprog, @"Liveprog", @"Effects written as EEL scripts", @"chevron.left.forwardslash.chevron.right", liveprogRows()),
         effect(SGKeyDSPReverb, @"Reverb", @"A room around the music", @"building.columns", @[
             choice(@"Room", SGKeyDSPReverbPreset, SGDSPReverbPresetNames()),
         ]),
@@ -179,7 +195,7 @@ static NSString *numberText(SGDSPRow *row, double value) {
     SGDSPRange range = SGDSPRangeFor(row.key);
     double step = range.step * row.scale;
     value *= row.scale;
-    int decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+    int decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3;
     if (fabs(value - round(value)) < 1e-6) decimals = 0;
     NSString *number = [NSString stringWithFormat:@"%.*f", decimals, fabs(value)];
     NSString *sign = number.doubleValue == 0 ? @"" : value < 0 ? @"−" : range.min < 0 && range.max > 0 ? @"+" : @"";
@@ -287,6 +303,9 @@ static UIFont *tabular(UIFont *font) {
     if (value == _shown) return;
     _shown = value;
     SGDSPSetNumber(_row.key, value);
+    if ([_row.key hasPrefix:SGKeyDSPLiveprogSliderPrefix]) {
+        SGDSPSetLiveprogSlider((int)_row.tag, value);
+    }
     [self showValue];
 }
 
@@ -368,6 +387,9 @@ static UIFont *tabular(UIFont *font) {
 - (void)tableView:(UITableView *)table didSelectRowAtIndexPath:(NSIndexPath *)path {
     [table deselectRowAtIndexPath:path animated:YES];
     SGDSPSetNumber(_row.key, path.row);
+    if ([_row.key hasPrefix:SGKeyDSPLiveprogSliderPrefix]) {
+        SGDSPSetLiveprogSlider((int)_row.tag, path.row);
+    }
     [table reloadRowsAtIndexPaths:table.indexPathsForVisibleRows withRowAnimation:UITableViewRowAnimationNone];
 }
 
@@ -486,6 +508,7 @@ static UIView *valueAndChevron(NSString *text) {
     [_open removeAllObjects];
     [_errors removeAllObjects];
     for (SGDSPEffect *e in _effects) {
+        if ([e.key isEqualToString:SGKeyDSPLiveprog]) e.rows = liveprogRows();
         if (!e.key || SGDSPSwitch(e.key)) [_open addObject:e.key ?: @""];
         if (e.key && SGDSPSwitch(e.key) && [reportingEffects() containsObject:e.key]) _errors[e.key] = SGDSPError(e.key);
     }

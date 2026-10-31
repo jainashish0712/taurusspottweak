@@ -326,12 +326,12 @@ static void applyEffect(SGDSPEngine *engine, NSString *effect) {
     } else if ([effect isEqualToString:SGKeyDSPLiveprog]) {
         NSString *path = libraryFile(SGDSPFileLiveprog, SGKeyDSPLiveprogFile, effect, on);
         if (on && !path) {
-            SGDSPEngineSetLiveprog(engine, false, NULL, error, sizeof error);
+            SGDSPEngineSetLiveprog(engine, false, NULL, NULL, error, sizeof error);
             return;
         }
         NSData *script = on ? textFile(path) : nil;
         CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();
-        ok = SGDSPEngineSetLiveprog(engine, on, script.bytes, error, sizeof error);
+        ok = SGDSPEngineSetLiveprog(engine, on, script.bytes, path.lastPathComponent.UTF8String, error, sizeof error);
         what = [NSString stringWithFormat:@"Liveprog %@%@%@", onOff(on), on ? @", " : @"", on ? [NSString stringWithFormat:@"%@ compiled in %.0f ms",
                 path.lastPathComponent, (CFAbsoluteTimeGetCurrent() - start) * 1000] : @""];
     } else if ([effect isEqualToString:SGKeyDSPReverb]) {
@@ -471,6 +471,10 @@ static void drain(void) {
     for (NSString *effect in effects) {
         if (![effect isEqualToString:SGKeyDSP]) applyEffect(engine, effect);
     }
+}
+
+void SGDSPSetLiveprogSlider(int index, double value) {
+    if (sg_engine) SGDSPEngineSetLiveprogSlider(sg_engine, index, value);
 }
 
 void SGDSPApply(NSString *effect) {

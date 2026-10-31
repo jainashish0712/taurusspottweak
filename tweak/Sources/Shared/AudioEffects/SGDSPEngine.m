@@ -515,10 +515,18 @@ bool SGDSPEngineSetDDC(SGDSPEngine *engine, bool on, const char *text, char *err
     return cascade != NULL;
 }
 
-bool SGDSPEngineSetLiveprog(SGDSPEngine *engine, bool on, const char *script, char *error, size_t errorSize) {
-    SGDSPLiveprog *liveprog = on ? SGDSPLiveprogCreate(script, engine->rate, error, errorSize) : NULL;
+bool SGDSPEngineSetLiveprog(SGDSPEngine *engine, bool on, const char *script, const char *scriptName, char *error, size_t errorSize) {
+    SGDSPLiveprog *liveprog = on ? SGDSPLiveprogCreate(script, scriptName, engine->rate, error, errorSize) : NULL;
     install(engine, SlotLiveprog, liveprog);
     return !on || liveprog;
+}
+
+bool SGDSPEngineSetLiveprogSlider(SGDSPEngine *engine, int index, double value) {
+    SGDSPLiveprog *liveprog = running(engine, SlotLiveprog);
+    if (!liveprog) return false;
+    SGDSPLiveprogSetSlider(liveprog, index, value);
+    done(engine);
+    return true;
 }
 
 #pragma mark - curves

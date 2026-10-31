@@ -59,6 +59,7 @@ void SGDSPReverbRun(void *reverb, float *left, float *right, uint32_t frames);
 void SGDSPReverbFree(void *reverb);
 
 typedef struct SGDSPLiveprog SGDSPLiveprog;
-SGDSPLiveprog *SGDSPLiveprogCreate(const char *script, double rate, char *error, size_t errorSize);
+SGDSPLiveprog *SGDSPLiveprogCreate(const char *script, const char *scriptName, double rate, char *error, size_t errorSize);
 void SGDSPLiveprogRun(void *liveprog, float *left, float *right, uint32_t frames);
 void SGDSPLiveprogFree(void *liveprog);
+void SGDSPLiveprogSetSlider(SGDSPLiveprog *liveprog, int index, double value);

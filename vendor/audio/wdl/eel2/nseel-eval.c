@@ -210,9 +210,27 @@ in_comment:
   }
   else if (isalnum_safe(*p) || *p == '_' || *p == '#' || *p == '$' || (*p == '.' && p < endptr-1 && p[1] >= '0' && p[1] <= '9'))
   {
+    int is_num = (isdigit_safe(*p) || (*p == '.' && p < endptr-1 && isdigit_safe(p[1])));
     if (*p == '$' && p < endptr-1 && p[1] == '~') p++;
     p++;
-    while (p < endptr && (isalnum_safe(*p) || *p == '_' || *p == '.')) p++;
+    while (p < endptr)
+    {
+      if (isalnum_safe(*p) || *p == '_' || *p == '.')
+      {
+        if (is_num && (*p == 'e' || *p == 'E') && p + 1 < endptr && (p[1] == '+' || p[1] == '-') && p + 2 < endptr && isdigit_safe(p[2]))
+        {
+          p += 2;
+        }
+        else
+        {
+          p++;
+        }
+      }
+      else
+      {
+        break;
+      }
+    }
   }
 #ifndef NSEEL_EEL1_COMPAT_MODE
   else if (*p == '\'' || *p == '\"')
@@ -305,14 +323,27 @@ in_string:
         *output = nseel_createCompiledValuePtr(scctx, NULL, buf);
         if (*output) rv = IDENTIFIER;
       }
-      else if ((rv >= '0' && rv <= '9') || (rv == '.' && toklen > 1 && tok[1] >= '0' && tok[1] <= '9')) // 123.45 or .45
+      else if ((rv >= '0' && rv <= '9') || (rv == '.' && toklen > 1 && tok[1] >= '0' && tok[1] <= '9')) // 123.45, .45, 1e-6, 1e6
       {
-        int x, pcnt = 0;
+        int x, pcnt = 0, ecnt = 0;
         for (x = 0; x < toklen; x ++)
         {
-          if (tok[x] == '.' ? (++pcnt > 1) : (tok[x] < '0' || tok[x] > '9'))
+          char c = tok[x];
+          if (c == '.')
           {
-            tok += x;
+            if (++pcnt > 1 || ecnt > 0) break;
+          }
+          else if (c == 'e' || c == 'E')
+          {
+            if (++ecnt > 1 || x == 0 || x == toklen - 1) break;
+            if (x + 1 < toklen && (tok[x+1] == '+' || tok[x+1] == '-'))
+            {
+              x++;
+              if (x == toklen - 1) break;
+            }
+          }
+          else if (c < '0' || c > '9')
+          {
             break;
           }
         }

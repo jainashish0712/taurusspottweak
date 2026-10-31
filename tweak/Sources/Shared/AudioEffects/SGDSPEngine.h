@@ -40,7 +40,8 @@ bool SGDSPEngineSetConvolver(SGDSPEngine *engine, bool on, const char *path, int
 // A ViPER DDC file's text.
 bool SGDSPEngineSetDDC(SGDSPEngine *engine, bool on, const char *text, char *error, size_t errorSize);
 // A Liveprog script's text; an error names the file's line.
-bool SGDSPEngineSetLiveprog(SGDSPEngine *engine, bool on, const char *script, char *error, size_t errorSize);
+bool SGDSPEngineSetLiveprog(SGDSPEngine *engine, bool on, const char *script, const char *scriptName, char *error, size_t errorSize);
+bool SGDSPEngineSetLiveprogSlider(SGDSPEngine *engine, int index, double value);
 
 #pragma mark - the render thread
 

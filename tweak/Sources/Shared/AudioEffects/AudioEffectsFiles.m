@@ -2,6 +2,7 @@
 #import "Core/SGCore.h"
 #import "AudioEffects.h"
 #import "AudioEffectsApply.h"
+#import "SGDSPLiveprog.h"
 
 static NSString *const SGDSPFileErrorDomain = @"spotifyglass.dsp.files";
 
@@ -110,7 +111,7 @@ static BOOL looksLike(SGDSPFileKind kind, NSData *data) {
     NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]
                      ?: [[NSString alloc] initWithData:data encoding:NSISOLatin1StringEncoding];
     if (kind == SGDSPFileDDC) return [text containsString:@"SR_44100"] && [text containsString:@"SR_48000"];
-    return [text containsString:@"@sample"];
+    return [text localizedCaseInsensitiveContainsString:@"@sample"] || [text localizedCaseInsensitiveContainsString:@"@init"] || [text containsString:@"spl0"] || [text containsString:@"slider"];
 }
 
 NSString *SGDSPImportFile(SGDSPFileKind kind, NSURL *url, NSError **error) {
@@ -158,4 +159,14 @@ BOOL SGDSPDeleteFile(SGDSPFileKind kind, NSString *name) {
     // The effect using it lets it go (and says the file is gone).
     if ([SGDSPString(fileKey(kind)) isEqualToString:name]) SGDSPApply(SGDSPEffectOf(fileKey(kind)));
     return YES;
+}
+
+NSArray<SGDSPLiveprogSlider *> *SGDSPLiveprogCurrentSliders(void) {
+    NSString *fileName = SGDSPString(SGKeyDSPLiveprogFile);
+    if (!fileName.length) return @[];
+    NSString *directory = SGDSPLibraryDirectory(SGDSPFileLiveprog);
+    NSString *path = [directory stringByAppendingPathComponent:fileName];
+    NSData *data = [NSData dataWithContentsOfFile:path];
+    if (!data.length) return @[];
+    return SGDSPLiveprogParseSliders(fileName, data.bytes);
 }

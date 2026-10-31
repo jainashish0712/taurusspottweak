@@ -5740,7 +5740,14 @@ opcodeRec *nseel_translate(compileContext *ctx, const char *tmp, size_t tmplen) 
       return nseel_createCompiledValue(ctx,(EEL_F)1.6180339887498948);
     else if ((!tmplen || tmplen == 4) && tmp[1] == '\'' && tmp[2] && tmp[3] == '\'')
       return nseel_createCompiledValue(ctx,(EEL_F)tmp[2]);      
-    else return NULL;
+    else
+    {
+      char *p = NULL;
+      unsigned int v = (unsigned int)strtoul(tmp + 1, &p, 16);
+      if (p > tmp + 1 && (!tmplen || (size_t)(p - tmp) == tmplen))
+        return nseel_createCompiledValue(ctx, (EEL_F)v);
+      return NULL;
+    }
   }
   else if (tmp[0] == '\'')
   {
