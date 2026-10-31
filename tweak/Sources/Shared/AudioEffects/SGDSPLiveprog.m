@@ -1,5 +1,5 @@
-#import "SGDSPLiveprog.h"
 #import "AudioEffects.h"
+#import "SGDSPEffects.h"
 #import <ctype.h>
 #import <pthread.h>
 #import <stdatomic.h>

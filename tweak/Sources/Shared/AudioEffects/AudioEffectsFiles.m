@@ -2,7 +2,6 @@
 #import "Core/SGCore.h"
 #import "AudioEffects.h"
 #import "AudioEffectsApply.h"
-#import "SGDSPLiveprog.h"
 
 static NSString *const SGDSPFileErrorDomain = @"spotifyglass.dsp.files";
 

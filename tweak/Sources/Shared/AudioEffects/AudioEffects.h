@@ -59,7 +59,20 @@ typedef struct {
 SGDSPRange SGDSPRangeFor(NSString *key);
 void SGDSPRegisterRange(NSString *key, SGDSPRange range);
 
-@class SGDSPLiveprogSlider;
+@interface SGDSPLiveprogSlider : NSObject
+@property (nonatomic) NSInteger index;
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, copy) NSString *alias;
+@property (nonatomic, copy) NSString *label;
+@property (nonatomic) double defaultValue;
+@property (nonatomic) double minValue;
+@property (nonatomic) double maxValue;
+@property (nonatomic) double step;
+@property (nonatomic, copy) NSArray<NSString *> *options;
+@property (nonatomic, copy) NSString *key;
+@end
+
+NSArray<SGDSPLiveprogSlider *> *SGDSPLiveprogParseSliders(NSString *scriptName, const char *script);
 NSArray<SGDSPLiveprogSlider *> *SGDSPLiveprogCurrentSliders(void);
 void SGDSPSetLiveprogSlider(int index, double value);
 
