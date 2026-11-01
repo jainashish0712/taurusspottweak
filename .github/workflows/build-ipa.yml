@@ -54,8 +54,11 @@ jobs:
             cp "$DYLIB" out/spotifyglass.dylib
             install_name_tool -change /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate @rpath/CydiaSubstrate.framework/CydiaSubstrate out/spotifyglass.dylib 2>/dev/null || true
             install_name_tool -change /usr/lib/libsubstrate.dylib @rpath/CydiaSubstrate.framework/CydiaSubstrate out/spotifyglass.dylib 2>/dev/null || true
+            install_name_tool -delete_rpath @executable_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
             install_name_tool -add_rpath @executable_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
+            install_name_tool -delete_rpath @loader_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
             install_name_tool -add_rpath @loader_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
+            install_name_tool -delete_rpath @loader_path out/spotifyglass.dylib 2>/dev/null || true
             install_name_tool -add_rpath @loader_path out/spotifyglass.dylib 2>/dev/null || true
             ldid -S out/spotifyglass.dylib 2>/dev/null || true
             [ -f tweak/spotifyglass.plist ] && cp tweak/spotifyglass.plist out/spotifyglass.plist

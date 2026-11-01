@@ -106,8 +106,11 @@ if [ -n "$DYLIB" ] && [ -f "$DYLIB" ]; then
   cp "$DYLIB" "$ROOT/out/spotifyglass.dylib"
   install_name_tool -change /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate @rpath/CydiaSubstrate.framework/CydiaSubstrate "$ROOT/out/spotifyglass.dylib" 2>/dev/null || true
   install_name_tool -change /usr/lib/libsubstrate.dylib @rpath/CydiaSubstrate.framework/CydiaSubstrate "$ROOT/out/spotifyglass.dylib" 2>/dev/null || true
+  install_name_tool -delete_rpath @executable_path/Frameworks "$ROOT/out/spotifyglass.dylib" 2>/dev/null || true
   install_name_tool -add_rpath @executable_path/Frameworks "$ROOT/out/spotifyglass.dylib" 2>/dev/null || true
+  install_name_tool -delete_rpath @loader_path/Frameworks "$ROOT/out/spotifyglass.dylib" 2>/dev/null || true
   install_name_tool -add_rpath @loader_path/Frameworks "$ROOT/out/spotifyglass.dylib" 2>/dev/null || true
+  install_name_tool -delete_rpath @loader_path "$ROOT/out/spotifyglass.dylib" 2>/dev/null || true
   install_name_tool -add_rpath @loader_path "$ROOT/out/spotifyglass.dylib" 2>/dev/null || true
   command -v ldid >/dev/null 2>&1 && ldid -S "$ROOT/out/spotifyglass.dylib" 2>/dev/null || true
   [ -f "$ROOT/tweak/spotifyglass.plist" ] && cp "$ROOT/tweak/spotifyglass.plist" "$ROOT/out/spotifyglass.plist"
