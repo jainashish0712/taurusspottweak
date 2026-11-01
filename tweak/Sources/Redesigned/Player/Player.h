@@ -25,6 +25,10 @@ NSArray<NSString *> *SGRPlayerBackgroundNames(void);
 #define SGRKeyPlayerCanvasBlurOpacity @"spotifyglass.redesign.player.canvasBlurOpacity"
 #define SGRKeyPlayerLyricsBlurOpacity @"spotifyglass.redesign.player.lyricsBlurOpacity"
 #define SGRKeyPlayerVisualiserBlurOpacity @"spotifyglass.redesign.player.visualiserBlurOpacity"
+#define SGRKeyKawarpSpeed @"spotifyglass.redesign.kawarp.speed"
+#define SGRKeyKawarpIntensity @"spotifyglass.redesign.kawarp.intensity"
+#define SGRKeyKawarpSaturation @"spotifyglass.redesign.kawarp.saturation"
+#define SGRKeyKawarpAudioReactive @"spotifyglass.redesign.kawarp.audioReactive"
 extern NSNotificationName const SGRPlayerBlurOpacityDidChangeNotification;
 void SGRPlayerApplyBackgroundToField(SGRArtworkField *field, SGRPlayerBackgroundKind kind);
 

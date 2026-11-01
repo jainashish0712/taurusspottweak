@@ -22,6 +22,9 @@
 // so later. Music Haptics schedules for the output latency; do the same here if the beat looks early on AirPods.
 //
 // Threading: main thread only, but for the reader, which runs on the render thread.
+#import <Metal/Metal.h>
+#import <QuartzCore/QuartzCore.h>
+#import <simd/simd.h>
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Shared/Audio/SGAudioPipeline.h"
@@ -486,3 +489,578 @@ void SGRPlayerVisualiserUpdate(void) {
         if (open != sg_view.blurred) [sg_view setBlurred:open animated:sg_view.window != nil];
     }
 }
+
+
+#pragma mark - Kawarp Fluid Domain Warping
+
+enum { kKawarpBlurSize = 128 };
+
+static NSString *const kShaderSource = @""
+"#include <metal_stdlib>\n"
+"using namespace metal;\n"
+"\n"
+"struct VertexOut {\n"
+"    float4 position [[position]];\n"
+"    float2 texCoord;\n"
+"};\n"
+"\n"
+"vertex VertexOut kawarpVertex(uint vertexID [[vertex_id]]) {\n"
+"    const float2 pos[6] = {\n"
+"        float2(-1.0, -1.0), float2( 1.0, -1.0), float2(-1.0,  1.0),\n"
+"        float2(-1.0,  1.0), float2( 1.0, -1.0), float2( 1.0,  1.0)\n"
+"    };\n"
+"    const float2 uv[6] = {\n"
+"        float2(0.0, 1.0), float2(1.0, 1.0), float2(0.0, 0.0),\n"
+"        float2(0.0, 0.0), float2(1.0, 1.0), float2(1.0, 0.0)\n"
+"    };\n"
+"    VertexOut out;\n"
+"    out.position = float4(pos[vertexID], 0.0, 1.0);\n"
+"    out.texCoord = uv[vertexID];\n"
+"    return out;\n"
+"}\n"
+"\n"
+"fragment float4 kawarpTintFragment(\n"
+"    VertexOut in [[stage_in]],\n"
+"    texture2d<float> tex [[texture(0)]],\n"
+"    sampler s [[sampler(0)]],\n"
+"    constant float3 &tintColor [[buffer(0)]],\n"
+"    constant float &tintIntensity [[buffer(1)]]\n"
+") {\n"
+"    float4 color = tex.sample(s, in.texCoord);\n"
+"    float luma = dot(color.rgb, float3(0.299, 0.587, 0.114));\n"
+"    float darkMask = 1.0 - smoothstep(0.0, 0.5, luma);\n"
+"    color.rgb = mix(color.rgb, tintColor, darkMask * tintIntensity);\n"
+"    return color;\n"
+"}\n"
+"\n"
+"fragment float4 kawaseBlurFragment(\n"
+"    VertexOut in [[stage_in]],\n"
+"    texture2d<float> tex [[texture(0)]],\n"
+"    sampler s [[sampler(0)]],\n"
+"    constant float &offset [[buffer(0)]]\n"
+") {\n"
+"    float2 texelSize = 1.0 / float2(128.0, 128.0);\n"
+"    float4 color = 0.0;\n"
+"    color += tex.sample(s, in.texCoord + float2(-offset, -offset) * texelSize);\n"
+"    color += tex.sample(s, in.texCoord + float2( offset, -offset) * texelSize);\n"
+"    color += tex.sample(s, in.texCoord + float2(-offset,  offset) * texelSize);\n"
+"    color += tex.sample(s, in.texCoord + float2( offset,  offset) * texelSize);\n"
+"    return color * 0.25;\n"
+"}\n"
+"\n"
+"static inline float3 mod289(float3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }\n"
+"static inline float2 mod289(float2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }\n"
+"static inline float3 permute(float3 x) { return mod289(((x * 34.0) + 1.0) * x); }\n"
+"\n"
+"static inline float snoise(float2 v) {\n"
+"    const float4 C = float4(0.211324865405187, 0.366025403784439,\n"
+"                            -0.577350269189626, 0.024390243902439);\n"
+"    float2 i  = floor(v + dot(v, float2(C.y, C.y)));\n"
+"    float2 x0 = v - i + dot(i, float2(C.x, C.x));\n"
+"    float2 i1 = (x0.x > x0.y) ? float2(1.0, 0.0) : float2(0.0, 1.0);\n"
+"    float4 x12 = float4(x0.x, x0.y, x0.x, x0.y) + float4(C.x, C.x, C.z, C.z);\n"
+"    x12.x -= i1.x;\n"
+"    x12.y -= i1.y;\n"
+"    float2 i_mod = mod289(i);\n"
+"    float3 p = permute(permute(i_mod.y + float3(0.0, i1.y, 1.0)) + i_mod.x + float3(0.0, i1.x, 1.0));\n"
+"    float3 m = max(0.5 - float3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);\n"
+"    m = m * m; m = m * m;\n"
+"    float3 x = 2.0 * fract(p * C.w) - 1.0;\n"
+"    float3 h = abs(x) - 0.5;\n"
+"    float3 ox = floor(x + 0.5);\n"
+"    float3 a0 = x - ox;\n"
+"    m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);\n"
+"    float3 g;\n"
+"    g.x = a0.x * x0.x + h.x * x0.y;\n"
+"    g.y = a0.y * x12.x + h.y * x12.y;\n"
+"    g.z = a0.z * x12.z + h.z * x12.w;\n"
+"    return 130.0 * dot(m, g);\n"
+"}\n"
+"\n"
+"static inline float hash31(float3 p) {\n"
+"    p = fract(p * 0.1031);\n"
+"    p += dot(p, float3(p.z, p.y, p.x) + 31.32);\n"
+"    return fract((p.x + p.y) * p.z);\n"
+"}\n"
+"\n"
+"struct KawarpUniforms {\n"
+"    float time;\n"
+"    float intensity;\n"
+"    float saturation;\n"
+"    float dithering;\n"
+"    float scale;\n"
+"    float blend;\n"
+"    float2 resolution;\n"
+"};\n"
+"\n"
+"fragment float4 kawarpMainFragment(\n"
+"    VertexOut in [[stage_in]],\n"
+"    texture2d<float> texCurrent [[texture(0)]],\n"
+"    texture2d<float> texNext [[texture(1)]],\n"
+"    sampler s [[sampler(0)]],\n"
+"    constant KawarpUniforms &u [[buffer(0)]]\n"
+") {\n"
+"    float2 uv = (in.texCoord - 0.5) / u.scale + 0.5;\n"
+"    uv = clamp(uv, 0.0, 1.0);\n"
+"    float t = u.time * 0.05;\n"
+"\n"
+"    float2 center = uv - 0.5;\n"
+"    float centerWeight = 1.0 - smoothstep(0.0, 0.7, length(center));\n"
+"\n"
+"    float n1 = snoise(uv * 0.35 + float2(t, t * 0.7));\n"
+"    float n2 = snoise(uv * 0.35 + float2(-t * 0.8, t * 0.5) + float2(50.0, 50.0));\n"
+"    float n3 = snoise(uv * 0.9 + float2(t * 1.2, -t) + float2(100.0, 0.0));\n"
+"    float n4 = snoise(uv * 0.9 + float2(-t, t * 1.1) + float2(0.0, 100.0));\n"
+"\n"
+"    float2 warp = float2(\n"
+"        n1 * 0.65 + n3 * 0.35,\n"
+"        n2 * 0.65 + n4 * 0.35\n"
+"    ) * centerWeight;\n"
+"\n"
+"    float2 warpedUV = uv + warp * u.intensity;\n"
+"    warpedUV = clamp(warpedUV, 0.0, 1.0);\n"
+"\n"
+"    float4 color1 = texCurrent.sample(s, warpedUV);\n"
+"    float4 color2 = texNext.sample(s, warpedUV);\n"
+"    float4 color = mix(color1, color2, u.blend);\n"
+"\n"
+"    float2 vCenter = in.texCoord - 0.5;\n"
+"    float vignette = 1.0 - dot(vCenter, vCenter) * 0.3;\n"
+"    color.rgb *= vignette;\n"
+"\n"
+"    float gray = dot(color.rgb, float3(0.299, 0.587, 0.114));\n"
+"    color.rgb = mix(float3(gray), color.rgb, u.saturation);\n"
+"\n"
+"    float2 pixelPos = floor(in.texCoord * u.resolution);\n"
+"    float noise = hash31(float3(pixelPos, floor(u.time * 60.0)));\n"
+"    color.rgb += (noise - 0.5) * u.dithering;\n"
+"\n"
+"    return color;\n"
+"}\n";
+
+struct KawarpUniforms {
+    float time;
+    float intensity;
+    float saturation;
+    float dithering;
+    float scale;
+    float blend;
+    simd_float2 resolution;
+};
+
+@interface SGRKawarpView : UIView <SGPlayerStateObserver>
+@property (nonatomic, readonly) BOOL blurred;
+- (void)setBlurred:(BOOL)blurred animated:(BOOL)animated;
+- (void)appear:(BOOL)animated;
+- (void)disappear:(void (^)(void))done;
+@end
+
+@implementation SGRKawarpView {
+    CAMetalLayer *_metalLayer;
+    id<MTLDevice> _device;
+    id<MTLCommandQueue> _queue;
+    id<MTLRenderPipelineState> _tintPipeline;
+    id<MTLRenderPipelineState> _blurPipeline;
+    id<MTLRenderPipelineState> _mainPipeline;
+    id<MTLSamplerState> _sampler;
+
+    id<MTLTexture> _blurTexture1;
+    id<MTLTexture> _blurTexture2;
+    id<MTLTexture> _currentTexture;
+    id<MTLTexture> _nextTexture;
+
+    CADisplayLink *_link;
+    CFTimeInterval _lastFrameTime;
+    double _accumulatedTime;
+    CFTimeInterval _transitionStart;
+    BOOL _transitioning;
+    BOOL _hasImage;
+
+    UIVisualEffectView *_lyricsBlur;
+    UIViewPropertyAnimator *_lyricsBlurAnimator;
+    BOOL _lyricsRequested;
+}
+
++ (Class)layerClass {
+    return [CAMetalLayer class];
+}
+
+
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (!(self = [super initWithFrame:frame])) return nil;
+    self.userInteractionEnabled = NO;
+    self.accessibilityElementsHidden = YES;
+
+    _device = MTLCreateSystemDefaultDevice();
+    if (!_device) {
+        SGLog(@"kawarp: Metal is not available on this device");
+        return nil;
+    }
+
+    _queue = [_device newCommandQueue];
+    _metalLayer = (CAMetalLayer *)self.layer;
+    _metalLayer.device = _device;
+    _metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    _metalLayer.framebufferOnly = YES;
+    _metalLayer.opaque = YES;
+
+    if (![self setupMetalPipelines]) return nil;
+    [self setupTextures];
+
+    _lyricsBlur = [[UIVisualEffectView alloc] initWithEffect:nil];
+    _lyricsBlur.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    [self addSubview:_lyricsBlur];
+
+    NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+    for (NSNotificationName name in @[UIApplicationDidBecomeActiveNotification, UIApplicationWillResignActiveNotification,
+                                      NSProcessInfoPowerStateDidChangeNotification, UIAccessibilityReduceMotionStatusDidChangeNotification]) {
+        [center addObserver:self selector:@selector(updateMotionSoon) name:name object:nil];
+    }
+    [center addObserver:self selector:@selector(artworkChanged) name:SGRNowPlayingArtworkDidChangeNotification object:nil];
+    SGRObservePlayerTransition(self, ^(id owner) { [owner updateMotion]; }, ^(id owner) { [owner updateMotion]; });
+    SGAddPlayerStateObserver(self);
+
+    [self artworkChanged];
+    return self;
+}
+
+- (void)dealloc {
+    [self setMoving:NO];
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+    if (_lyricsBlurAnimator && _lyricsBlurAnimator.state != UIViewAnimatingStateInactive) [_lyricsBlurAnimator stopAnimation:YES];
+}
+
+- (BOOL)setupMetalPipelines {
+    NSError *error = nil;
+    id<MTLLibrary> library = [_device newLibraryWithSource:kShaderSource options:nil error:&error];
+    if (!library || error) {
+        SGLog(@"kawarp: shader compilation failed: %@", error);
+        return NO;
+    }
+
+    id<MTLFunction> vertexFn = [library newFunctionWithName:@"kawarpVertex"];
+    id<MTLFunction> tintFn = [library newFunctionWithName:@"kawarpTintFragment"];
+    id<MTLFunction> blurFn = [library newFunctionWithName:@"kawaseBlurFragment"];
+    id<MTLFunction> mainFn = [library newFunctionWithName:@"kawarpMainFragment"];
+
+    MTLRenderPipelineDescriptor *desc = [MTLRenderPipelineDescriptor new];
+    desc.vertexFunction = vertexFn;
+
+    // Ping-pong blur textures are RGBA8Unorm
+    desc.fragmentFunction = tintFn;
+    desc.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+    _tintPipeline = [_device newRenderPipelineStateWithDescriptor:desc error:&error];
+
+    desc.fragmentFunction = blurFn;
+    _blurPipeline = [_device newRenderPipelineStateWithDescriptor:desc error:&error];
+
+    // Screen output pipeline
+    desc.fragmentFunction = mainFn;
+    desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    _mainPipeline = [_device newRenderPipelineStateWithDescriptor:desc error:&error];
+
+    MTLSamplerDescriptor *samplerDesc = [MTLSamplerDescriptor new];
+    samplerDesc.minFilter = MTLSamplerMinMagFilterLinear;
+    samplerDesc.magFilter = MTLSamplerMinMagFilterLinear;
+    samplerDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
+    samplerDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
+    _sampler = [_device newSamplerStateWithDescriptor:samplerDesc];
+
+    return _tintPipeline && _blurPipeline && _mainPipeline && _sampler;
+}
+
+- (void)setupTextures {
+    MTLTextureDescriptor *desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                    width:kKawarpBlurSize
+                                                                                   height:kKawarpBlurSize
+                                                                                mipmapped:NO];
+    desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+    _blurTexture1 = [_device newTextureWithDescriptor:desc];
+    _blurTexture2 = [_device newTextureWithDescriptor:desc];
+    _currentTexture = [_device newTextureWithDescriptor:desc];
+    _nextTexture = [_device newTextureWithDescriptor:desc];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGRect bounds = self.bounds;
+    _lyricsBlur.frame = bounds;
+    CGSize nativeSize = CGSizeMake(bounds.size.width * self.contentScaleFactor, bounds.size.height * self.contentScaleFactor);
+    if (!CGSizeEqualToSize(_metalLayer.drawableSize, nativeSize) && nativeSize.width > 0 && nativeSize.height > 0) {
+        _metalLayer.drawableSize = nativeSize;
+    }
+}
+
+#pragma mark - artwork & blur
+
+- (void)artworkChanged {
+    UIImage *image = SGRNowPlayingArtwork(NULL, NULL);
+    if (!image) return;
+
+    // Draw image to 128x128 32-bit RGBA bitmap
+    size_t width = kKawarpBlurSize, height = kKawarpBlurSize;
+    NSMutableData *data = [NSMutableData dataWithLength:width * height * 4];
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGContextRef ctx = CGBitmapContextCreate(data.mutableBytes, width, height, 8, width * 4, space,
+                                            kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(space);
+    if (!ctx) return;
+
+    CGContextDrawImage(ctx, CGRectMake(0, 0, width, height), image.CGImage);
+    CGContextRelease(ctx);
+
+    MTLTextureDescriptor *srcDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                       width:width
+                                                                                      height:height
+                                                                                   mipmapped:NO];
+    id<MTLTexture> rawTexture = [_device newTextureWithDescriptor:srcDesc];
+    [rawTexture replaceRegion:MTLRegionMake2D(0, 0, width, height)
+                  mipmapLevel:0
+                    withBytes:data.bytes
+                  bytesPerRow:width * 4];
+
+    // Step 1: Pre-tint dark areas -> _blurTexture1
+    id<MTLCommandBuffer> cmd = [_queue commandBuffer];
+    MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
+    pass.colorAttachments[0].texture = _blurTexture1;
+    pass.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+    id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:pass];
+    [enc setRenderPipelineState:_tintPipeline];
+    [enc setFragmentTexture:rawTexture atIndex:0];
+    [enc setFragmentSamplerState:_sampler atIndex:0];
+
+    simd_float3 tintColor = simd_make_float3(0.16f, 0.16f, 0.24f);
+    float tintIntensity = 0.15f;
+    [enc setFragmentBytes:&tintColor length:sizeof(tintColor) atIndex:0];
+    [enc setFragmentBytes:&tintIntensity length:sizeof(tintIntensity) atIndex:1];
+    [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
+    [enc endEncoding];
+
+    // Step 2: 8 passes Kawase blur ping-ponging
+    id<MTLTexture> readTex = _blurTexture1;
+    id<MTLTexture> writeTex = _blurTexture2;
+    for (int i = 0; i < 8; i++) {
+        pass.colorAttachments[0].texture = writeTex;
+        enc = [cmd renderCommandEncoderWithDescriptor:pass];
+        [enc setRenderPipelineState:_blurPipeline];
+        [enc setFragmentTexture:readTex atIndex:0];
+        [enc setFragmentSamplerState:_sampler atIndex:0];
+        float offset = (float)i + 0.5f;
+        [enc setFragmentBytes:&offset length:sizeof(offset) atIndex:0];
+        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
+        [enc endEncoding];
+
+        id<MTLTexture> swap = readTex;
+        readTex = writeTex;
+        writeTex = swap;
+    }
+
+    // Step 3: Copy to next texture
+    id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
+    if (!_hasImage) {
+        [blit copyFromTexture:readTex toTexture:_currentTexture];
+        [blit copyFromTexture:readTex toTexture:_nextTexture];
+        _hasImage = YES;
+        _transitioning = NO;
+    } else {
+        id<MTLTexture> swap = _currentTexture;
+        _currentTexture = _nextTexture;
+        _nextTexture = swap;
+        [blit copyFromTexture:readTex toTexture:_nextTexture];
+        _transitioning = YES;
+        _transitionStart = CACurrentMediaTime();
+    }
+    [blit endEncoding];
+    [cmd commit];
+}
+
+#pragma mark - display loop
+
+- (void)appear:(BOOL)animated {
+    self.alpha = 0;
+    if (animated) SGRAnimate(SGRMotionFade, ^{ self.alpha = 1; }, nil);
+    else self.alpha = 1;
+}
+
+- (void)disappear:(void (^)(void))done {
+    [self setMoving:NO];
+    SGRAnimate(SGRMotionFade, ^{
+        self.alpha = 0;
+        self->_lyricsRequested = NO;
+        self->_lyricsBlurAnimator = setBlurIntensity(self->_lyricsBlur, self->_lyricsBlurAnimator, 0);
+    }, ^(BOOL finished) { if (done) done(); });
+}
+
+- (BOOL)blurred {
+    return _lyricsRequested;
+}
+
+- (void)setBlurred:(BOOL)blurred animated:(BOOL)animated {
+    _lyricsRequested = blurred;
+    CGFloat opacity = MIN(100, MAX(0, SGInt(SGRKeyPlayerVisualiserBlurOpacity, 100))) / 100.0;
+    void (^apply)(void) = ^{
+        self->_lyricsBlurAnimator = setBlurIntensity(self->_lyricsBlur, self->_lyricsBlurAnimator, blurred ? opacity : 0);
+    };
+    if (animated) SGRAnimate(SGRMotionFade, apply, nil);
+    else apply();
+    [self updateMotion];
+}
+
+- (void)playerStateDidChange:(SPTPlayerState *)state {
+    [self updateMotion];
+}
+
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    [self updateMotion];
+}
+
+- (void)updateMotionSoon {
+    dispatch_async(dispatch_get_main_queue(), ^{ [self updateMotion]; });
+}
+
+- (void)updateMotion {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(updateMotion) object:nil];
+    BOOL front = UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+    BOOL may = self.window && front && !NSProcessInfo.processInfo.lowPowerModeEnabled;
+    NSTimeInterval wait = SGPlayerTransitionEnds() - CACurrentMediaTime();
+    if (may && (wait > 0 || SGRPlayerIsTransitioning())) {
+        may = NO;
+        if (wait > 0) [self performSelector:@selector(updateMotion) withObject:nil afterDelay:wait + 0.05 inModes:@[NSRunLoopCommonModes]];
+    }
+    BOOL playing = !SGPlayerState().isPaused;
+    [self setMoving:may && playing];
+}
+
+- (void)setMoving:(BOOL)moving {
+    if (moving) {
+        if (!_link) {
+            _link = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
+            [_link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+            _lastFrameTime = 0;
+        }
+        float most = SGRReduceMotion() ? 15 : _lyricsRequested ? 30 : 60;
+        _link.preferredFrameRateRange = CAFrameRateRangeMake(most / 2, most, most);
+    } else if (_link) {
+        [_link invalidate];
+        _link = nil;
+    }
+}
+
+- (void)tick:(CADisplayLink *)link {
+    if (!_hasImage || self.bounds.size.width <= 0 || self.bounds.size.height <= 0) return;
+
+    CFTimeInterval now = link.timestamp;
+    double dt = _lastFrameTime ? MIN(now - _lastFrameTime, 0.1) : link.duration;
+    _lastFrameTime = now;
+
+    // Speed setting (default 100%)
+    float speedMultiplier = (float)SGInt(SGRKeyKawarpSpeed, 100) / 100.0f;
+    _accumulatedTime += dt * speedMultiplier;
+
+    // Optional audio reactivity pulse
+    float baseIntensity = (float)SGInt(SGRKeyKawarpIntensity, 100) / 100.0f;
+    if (SGEnabled(SGRKeyKawarpAudioReactive)) {
+        float levels[SGRSpectrumBands];
+        SGRSpectrumRead(levels);
+        float bass = fmaxf(0.0f, (levels[0] + levels[1] + levels[2]) / 3.0f + 60.0f) / 60.0f;
+        baseIntensity *= (1.0f + 0.25f * fminf(1.0f, bass));
+    }
+
+    // Crossfade blend factor
+    float blend = 1.0f;
+    if (_transitioning) {
+        double elapsed = CACurrentMediaTime() - _transitionStart;
+        if (elapsed >= 1.0) {
+            _transitioning = NO;
+        } else {
+            blend = (float)(0.5 - 0.5 * cos(elapsed * M_PI));
+        }
+    }
+
+    id<CAMetalDrawable> drawable = [_metalLayer nextDrawable];
+    if (!drawable) return;
+
+    MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
+    pass.colorAttachments[0].texture = drawable.texture;
+    pass.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+    id<MTLCommandBuffer> cmd = [_queue commandBuffer];
+    id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:pass];
+    [enc setRenderPipelineState:_mainPipeline];
+    [enc setFragmentTexture:_currentTexture atIndex:0];
+    [enc setFragmentTexture:_nextTexture atIndex:1];
+    [enc setFragmentSamplerState:_sampler atIndex:0];
+
+    struct KawarpUniforms u;
+    u.time = (float)_accumulatedTime;
+    u.intensity = baseIntensity;
+    u.saturation = (float)SGInt(SGRKeyKawarpSaturation, 150) / 100.0f;
+    u.dithering = 0.008f;
+    u.scale = 1.0f;
+    u.blend = blend;
+    u.resolution = simd_make_float2((float)self.bounds.size.width, (float)self.bounds.size.height);
+    [enc setFragmentBytes:&u length:sizeof(u) atIndex:0];
+
+    [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
+    [enc endEncoding];
+
+    [cmd presentDrawable:drawable];
+    [cmd commit];
+}
+
+@end
+
+#pragma mark - Redesigned Player Integration
+
+static SGRKawarpView *sg_kawarpView;
+
+BOOL SGRPlayerKawarpShowing(void) {
+    SGRPlayerBackgroundKind background = SGRPlayerBackground();
+    return background == SGRPlayerBackgroundKawarp
+        || (background == SGRPlayerBackgroundAnimated
+            && SGRPlayerAnimatedFallback() == SGRPlayerBackgroundKawarp);
+}
+
+UIView *SGRPlayerKawarpPreview(void) {
+    static SGRKawarpView *preview;
+    if (!preview) preview = [[SGRKawarpView alloc] initWithFrame:CGRectZero];
+    return preview;
+}
+
+static void layOutKawarp(SGRArtworkField *field) {
+    if (sg_kawarpView.superview != field) [field addSubview:sg_kawarpView];
+    else if (field.subviews.lastObject != sg_kawarpView) [field bringSubviewToFront:sg_kawarpView];
+    CGSize size = field.bounds.size;
+    CGFloat screen = field.window.bounds.size.height ?: size.height;
+    CGRect frame = CGRectMake(0, 0, size.width, MAX(size.height, screen) + field.bleed.bottom);
+    if (!CGRectEqualToRect(sg_kawarpView.frame, frame)) sg_kawarpView.frame = frame;
+}
+
+void SGRPlayerKawarpUpdate(void) {
+    SGRArtworkField *field = SGRPlayerField();
+    BOOL wanted = SGRPlayerKawarpShowing() && field && !SGRPlayerMotionShowing();
+    if (!wanted) {
+        SGRKawarpView *old = sg_kawarpView;
+        sg_kawarpView = nil;
+        if (old.window) [old disappear:^{ [old removeFromSuperview]; }];
+        else [old removeFromSuperview];
+        return;
+    }
+    BOOL made = !sg_kawarpView;
+    if (made) sg_kawarpView = [[SGRKawarpView alloc] initWithFrame:CGRectZero];
+    layOutKawarp(field);
+    if (made) {
+        [sg_kawarpView setBlurred:SGRPlayerLyricsOpen() animated:NO];
+        [sg_kawarpView appear:field.window != nil];
+        SGLog(@"redesign player: kawarp on the field");
+    } else {
+        BOOL open = SGRPlayerLyricsOpen();
+        if (open != sg_kawarpView.blurred) [sg_kawarpView setBlurred:open animated:sg_kawarpView.window != nil];
+    }
+}
+
