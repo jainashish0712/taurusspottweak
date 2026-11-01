@@ -29,14 +29,7 @@ tweak:    ## build spotifyglass.dylib and .deb only into out/ (no IPA)
 	fi
 	env -u MAKELEVEL gmake -C tweak clean package
 	@cp "$$(find tweak/.theos -name 'spotifyglass.dylib' | head -1)" out/spotifyglass.dylib
-	@install_name_tool -change /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate @rpath/CydiaSubstrate.framework/CydiaSubstrate out/spotifyglass.dylib 2>/dev/null || true
-	@install_name_tool -change /usr/lib/libsubstrate.dylib @rpath/CydiaSubstrate.framework/CydiaSubstrate out/spotifyglass.dylib 2>/dev/null || true
-	@install_name_tool -delete_rpath @executable_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
-	@install_name_tool -add_rpath @executable_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
-	@install_name_tool -delete_rpath @loader_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
-	@install_name_tool -add_rpath @loader_path/Frameworks out/spotifyglass.dylib 2>/dev/null || true
-	@install_name_tool -delete_rpath @loader_path out/spotifyglass.dylib 2>/dev/null || true
-	@install_name_tool -add_rpath @loader_path out/spotifyglass.dylib 2>/dev/null || true
+	@python3 scripts/patch-dylib.py out/spotifyglass.dylib
 	@command -v ldid >/dev/null 2>&1 && ldid -S out/spotifyglass.dylib 2>/dev/null || true
 	@[ -f tweak/spotifyglass.plist ] && cp tweak/spotifyglass.plist out/spotifyglass.plist || true
 	@cp tweak/packages/*.deb out/ 2>/dev/null || true

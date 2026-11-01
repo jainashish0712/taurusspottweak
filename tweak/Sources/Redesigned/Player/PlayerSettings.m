@@ -75,7 +75,7 @@ static NSArray<NSString *> *backgroundNotes(void) {
     self.layer.cornerRadius = kCardRadius;
     self.layer.cornerCurve = kCACornerCurveContinuous;
     self.backgroundColor = SGRNeutralField();
-    self.userInteractionEnabled = NO;
+    self.userInteractionEnabled = YES;
     self.isAccessibilityElement = YES;
     self.accessibilityTraits = UIAccessibilityTraitImage;
     self.accessibilityLabel = @"Player preview";
@@ -240,7 +240,7 @@ static NSArray<NSString *> *backgroundNotes(void) {
 
 - (void)reloadCoverVisibilityAnimated:(BOOL)animated {
     void (^apply)(void) = ^{
-        self->_cover.alpha = SGRPlayerCoverShouldBeShown() ? 1.0 : 0.0;
+        self->_cover.alpha = SGRPlayerCoverShouldBeShown() ? 1.0 : 0.01;
     };
     if (animated && self.window) {
         [UIView animateWithDuration:0.25 animations:apply];
@@ -593,7 +593,7 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
         SGSection(nil, @[animatedFallback, sources, lowData]),
         SGNotedSection(nil, fluid, @"Brightness above 100% can make white text harder to read. A paused song holds the "
                     @"background still. Animated and Visualiser use these where they show Fluid."),
-        SGNotedSection(nil, kawarpRows, @"Kawarp domain warping and Kawase blur parameters. Tap the album thumbnail in the player to toggle its visibility."),
+        SGNotedSection(@"Kawarp", kawarpRows, @"Kawarp domain warping and Kawase blur parameters. Tap the album thumbnail in the player to toggle its visibility."),
         SGNotedSection(@"Background opacity", blur, @"Lower opacity makes each background layer more transparent. "
                     @"Canvas and lyrics sliders reduce blur strength directly; at 0% the blur is fully transparent."),
         SGNotedSection(@"Controls", @[

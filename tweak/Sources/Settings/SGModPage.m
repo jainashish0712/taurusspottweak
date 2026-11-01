@@ -590,20 +590,24 @@ static void showProgress(UITableViewCell *cell, SGModRow *row, BOOL animated) {
 }
 
 - (UIView *)tableView:(UITableView *)table viewForHeaderInSection:(NSInteger)section {
+    if (_shown[(NSUInteger)section].count == 0) return nil;
     NSString *title = _sections[(NSUInteger)section].title;
     return title ? SGSectionHeader(table, title) : nil;
 }
 
 - (CGFloat)tableView:(UITableView *)table heightForHeaderInSection:(NSInteger)section {
+    if (_shown[(NSUInteger)section].count == 0) return CGFLOAT_MIN;
     return _sections[(NSUInteger)section].title ? SGSectionHeaderHeight : SGSectionGap;
 }
 
 - (UIView *)tableView:(UITableView *)table viewForFooterInSection:(NSInteger)section {
+    if (_shown[(NSUInteger)section].count == 0) return nil;
     NSString *footer = _sections[(NSUInteger)section].footer;
     return footer ? SGSectionFooter(table, footer) : nil;
 }
 
 - (CGFloat)tableView:(UITableView *)table heightForFooterInSection:(NSInteger)section {
+    if (_shown[(NSUInteger)section].count == 0) return CGFLOAT_MIN;
     NSString *footer = _sections[(NSUInteger)section].footer;
     return footer ? SGSectionFooterHeight(table, footer) : CGFLOAT_MIN;
 }
