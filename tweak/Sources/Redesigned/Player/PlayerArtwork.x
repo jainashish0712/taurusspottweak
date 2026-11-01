@@ -142,10 +142,16 @@ static void scaleEveryCover(BOOL animated) {
             scaleCover(tilt, scale);
             UIView *cover = coverIn(tilt);
             if (cover != sg_hiddenCover) cover.alpha = show ? (SGRReduceMotion() && SGPlayerState().isPaused ? 0.75 : 1) : 0;
+            UIView *plate = SGRShadowPlateIn(tilt, &kPlateKey);
+            plate.alpha = show ? 1 : 0;
         }
     };
     if (animated) SGRAnimate(SGRReduceMotion() ? SGRMotionRespond : SGRMotionLayout, apply, nil);
     else apply();
+}
+
+void SGRPlayerScaleEveryCover(BOOL animated) {
+    scaleEveryCover(animated);
 }
 
 #pragma mark - hold to play faster
@@ -281,6 +287,9 @@ static void watchHold(UIView *tilt) {
     if (!SGRPlayerCoverShouldBeShown()) {
         cover.alpha = 0;
         plate.alpha = 0;
+    } else if (cover != sg_hiddenCover) {
+        cover.alpha = SGRReduceMotion() && SGPlayerState().isPaused ? 0.75 : 1;
+        plate.alpha = 1;
     }
 
     static dispatch_once_t once;

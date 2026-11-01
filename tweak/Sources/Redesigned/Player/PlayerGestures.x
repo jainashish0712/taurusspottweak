@@ -1,8 +1,15 @@
 #import "Core/SGCore.h"
 #import "Shared/Gestures/Gestures.h"
+#import "Player.h"
 
 %hook _TtC35CreativeWorkCommons_CoverArtTiltKit16CoverArtTiltView
 - (void)handleTap {
+    if (SGRPlayerKawarpShowing()) {
+        BOOL hidden = !SGFlag(SGRKeyKawarpCoverHidden, NO);
+        SGSetFlag(SGRKeyKawarpCoverHidden, hidden);
+        SGRPlayerUpdateCoverVisibility(YES);
+        return;
+    }
     if (SGFlag(SGKeyGestures, NO)) return;
     %orig;
 }

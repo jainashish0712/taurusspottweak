@@ -511,13 +511,24 @@ static void setCoverShown(BOOL shown, BOOL animated) {
 
 BOOL SGRPlayerCoverShouldBeShown(void) {
     SGRPlayerBackgroundKind background = SGRPlayerBackground();
-    return background != SGRPlayerBackgroundFill
-        && !(background == SGRPlayerBackgroundAnimated
-             && (sg_motion || SGRPlayerAnimatedFallback() == SGRPlayerBackgroundFill));
+    if (background == SGRPlayerBackgroundFill) return NO;
+    if (background == SGRPlayerBackgroundKawarp) return !SGFlag(SGRKeyKawarpCoverHidden, NO);
+    if (background == SGRPlayerBackgroundAnimated) {
+        if (sg_motion) return NO;
+        SGRPlayerBackgroundKind fallback = SGRPlayerAnimatedFallback();
+        if (fallback == SGRPlayerBackgroundFill) return NO;
+        if (fallback == SGRPlayerBackgroundKawarp) return !SGFlag(SGRKeyKawarpCoverHidden, NO);
+    }
+    return YES;
+}
+
+void SGRPlayerUpdateCoverVisibility(BOOL animated) {
+    setCoverShown(SGRPlayerCoverShouldBeShown(), animated);
+    SGRPlayerScaleEveryCover(animated);
 }
 
 static void updateCoverVisibility(BOOL animated) {
-    setCoverShown(SGRPlayerCoverShouldBeShown(), animated);
+    SGRPlayerUpdateCoverVisibility(animated);
 }
 
 void SGRPlayerMotionFieldLaidOut(void) {

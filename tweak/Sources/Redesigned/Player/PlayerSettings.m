@@ -92,6 +92,9 @@ static NSArray<NSString *> *backgroundNotes(void) {
     _cover.tintColor = SGRTertiary();
     _cover.backgroundColor = SGRSolidGlassFill();
     _cover.preferredSymbolConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightRegular];
+    _cover.userInteractionEnabled = YES;
+    UITapGestureRecognizer *coverTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(coverTapped)];
+    [_cover addGestureRecognizer:coverTap];
     [self addSubview:_cover];
 
     // The card reads as one image; the words glide as the player's own do.
@@ -222,7 +225,28 @@ static NSArray<NSString *> *backgroundNotes(void) {
     } else {
         apply();
     }
+    [self reloadCoverVisibilityAnimated:animated];
     [self setNeedsLayout];
+}
+
+- (void)coverTapped {
+    if (SGRPlayerKawarpShowing()) {
+        BOOL hidden = !SGFlag(SGRKeyKawarpCoverHidden, NO);
+        SGSetFlag(SGRKeyKawarpCoverHidden, hidden);
+        SGRPlayerUpdateCoverVisibility(YES);
+        [self reloadCoverVisibilityAnimated:YES];
+    }
+}
+
+- (void)reloadCoverVisibilityAnimated:(BOOL)animated {
+    void (^apply)(void) = ^{
+        self->_cover.alpha = SGRPlayerCoverShouldBeShown() ? 1.0 : 0.0;
+    };
+    if (animated && self.window) {
+        [UIView animateWithDuration:0.25 animations:apply];
+    } else {
+        apply();
+    }
 }
 
 - (void)refreshBackgroundOpacity {
@@ -335,6 +359,57 @@ static NSArray<NSString *> *backgroundNotes(void) {
 
 @end
 
+@interface SGRKawarpTintPicker : NSObject <UIColorPickerViewControllerDelegate>
+@property (nonatomic, copy) void (^onPick)(UIColor *color);
+@end
+
+@implementation SGRKawarpTintPicker
+- (void)colorPickerViewController:(UIColorPickerViewController *)viewController didSelectColor:(UIColor *)color continuously:(BOOL)continuously {
+    if (self.onPick) self.onPick(color);
+}
+- (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)viewController {
+    if (self.onPick) self.onPick(viewController.selectedColor);
+}
+@end
+
+static void chooseKawarpTint(UIViewController *host, void (^onDone)(void)) {
+    NSInteger rgb = SGInt(SGRKeyKawarpTintColor, 0x28283C);
+    UIColor *current = [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                                       green:((rgb >> 8) & 0xFF) / 255.0
+                                        blue:(rgb & 0xFF) / 255.0 alpha:1];
+    UIColorPickerViewController *picker = [UIColorPickerViewController new];
+    picker.supportsAlpha = NO;
+    picker.selectedColor = current;
+    static SGRKawarpTintPicker *pickerDelegate;
+    if (!pickerDelegate) pickerDelegate = [SGRKawarpTintPicker new];
+    pickerDelegate.onPick = ^(UIColor *c) {
+        CGFloat r, g, b, a;
+        if ([c getRed:&r green:&g blue:&b alpha:&a]) {
+            NSInteger newRGB = ((int)lround(r * 255) << 16) | ((int)lround(g * 255) << 8) | (int)lround(b * 255);
+            SGSetInt(SGRKeyKawarpTintColor, newRGB);
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"SGRKawarpParametersDidChangeNotification" object:nil];
+            if (onDone) onDone();
+        }
+    };
+    picker.delegate = pickerDelegate;
+    [host presentViewController:picker animated:YES completion:nil];
+}
+
+static SGModRow *kawarpSlider(NSString *title, NSString *key, double min, double max, double step,
+                             double fallback, double divisor, NSString *formatStr,
+                             BOOL (^visible)(void), void (^changed)(void)) {
+    SGModRow *row = SGSliderRow(title, nil, min, max, step, ^double {
+        return (double)SGInt(key, (NSInteger)lround(fallback * divisor)) / divisor;
+    }, ^(double value) {
+        SGSetInt(key, (NSInteger)lround(value * divisor));
+        if (changed) changed();
+    }, ^NSString *(double value) {
+        return [NSString stringWithFormat:formatStr, value];
+    });
+    row.visible = visible;
+    return row;
+}
+
 // One of Fluid's settings on a slider, written out with `unit` after the number.
 static SGModRow *fluidSlider(NSString *title, SGRFluidSetting setting, NSString *unit) {
     SGRFluidLimits l = SGRFluidLimitsOf(setting);
@@ -386,6 +461,18 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
         SGRPlayerBackgroundKind kind = SGRPlayerBackground();
         if (kind == SGRPlayerBackgroundAnimated) kind = SGRPlayerAnimatedFallback();
         return kind == SGRPlayerBackgroundFluid || kind == SGRPlayerBackgroundVisualiser;
+    };
+    BOOL (^kawarpBackdrop)(void) = ^BOOL {
+        SGRPlayerBackgroundKind kind = SGRPlayerBackground();
+        if (kind == SGRPlayerBackgroundAnimated) kind = SGRPlayerAnimatedFallback();
+        return kind == SGRPlayerBackgroundKawarp;
+    };
+    void (^refreshKawarp)(void) = ^{
+        [weakShowcase reloadBackgroundAnimated:NO];
+    };
+    void (^refreshKawarpTextures)(void) = ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"SGRKawarpParametersDidChangeNotification" object:nil];
+        [weakShowcase reloadBackgroundAnimated:NO];
     };
     SGModRow *animatedFallback = SGChoiceRow(@"Animated fallback",
                                                @"Background shown when Canvas is unavailable or cannot play",
@@ -441,6 +528,44 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
     ];
     for (SGModRow *row in fluid) row.visible = fluidBackdrop;
 
+    SGModRow *kawarpReset = SGActionRow(@"Reset", nil, ^{
+        SGSetInt(SGRKeyKawarpWarp, 100);
+        SGSetInt(SGRKeyKawarpBlur, 8);
+        SGSetInt(SGRKeyKawarpSpeed, 100);
+        SGSetInt(SGRKeyKawarpTransition, 1000);
+        SGSetInt(SGRKeyKawarpSaturation, 150);
+        SGSetInt(SGRKeyKawarpTint, 15);
+        SGSetInt(SGRKeyKawarpTintColor, 0x28283C);
+        SGSetInt(SGRKeyKawarpDither, 80);
+        SGSetInt(SGRKeyKawarpScale, 100);
+        refreshKawarpTextures();
+        [weakPage.tableView reloadData];
+    });
+    kawarpReset.color = SGRed();
+
+    SGModRow *tintColorRow = SGStatActionRow(@"Tint color", nil, ^NSString *{
+        NSInteger rgb = SGInt(SGRKeyKawarpTintColor, 0x28283C);
+        return [NSString stringWithFormat:@"#%06X", (unsigned int)rgb];
+    }, ^{
+        chooseKawarpTint(weakPage, ^{
+            [weakPage.tableView reloadData];
+        });
+    });
+    tintColorRow.visible = kawarpBackdrop;
+
+    NSArray<SGModRow *> *kawarpRows = @[
+        kawarpSlider(@"Warp", SGRKeyKawarpWarp, 0.0, 1.0, 0.01, 1.0, 100.0, @"%.2f", kawarpBackdrop, refreshKawarp),
+        kawarpSlider(@"Blur", SGRKeyKawarpBlur, 1.0, 40.0, 1.0, 8.0, 1.0, @"%.0f", kawarpBackdrop, refreshKawarpTextures),
+        kawarpSlider(@"Speed", SGRKeyKawarpSpeed, 0.1, 3.0, 0.1, 1.0, 100.0, @"%.1f×", kawarpBackdrop, refreshKawarp),
+        kawarpSlider(@"Transition", SGRKeyKawarpTransition, 0.0, 3.0, 0.1, 1.0, 1000.0, @"%.1fs", kawarpBackdrop, refreshKawarp),
+        kawarpSlider(@"Saturation", SGRKeyKawarpSaturation, 0.0, 3.0, 0.05, 1.5, 100.0, @"%.2f", kawarpBackdrop, refreshKawarp),
+        kawarpSlider(@"Tint", SGRKeyKawarpTint, 0.0, 100.0, 1.0, 15.0, 1.0, @"%.0f%%", kawarpBackdrop, refreshKawarpTextures),
+        tintColorRow,
+        kawarpSlider(@"Dither", SGRKeyKawarpDither, 0.0, 20.0, 0.1, 8.0, 10.0, @"%.1f", kawarpBackdrop, refreshKawarp),
+        kawarpSlider(@"Scale", SGRKeyKawarpScale, 0.01, 4.0, 0.01, 1.0, 100.0, @"%.2f", kawarpBackdrop, refreshKawarp),
+        kawarpReset,
+    ];
+
     NSArray<SGModRow *> *blur = @[
         opacitySlider(@"Blurred artwork opacity", SGRKeyPlayerBackdropOpacity, stillOrFill, refreshArtworkOpacity),
         opacitySlider(@"Fill artwork opacity", SGRKeyPlayerFillOpacity,
@@ -468,6 +593,7 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
         SGSection(nil, @[animatedFallback, sources, lowData]),
         SGNotedSection(nil, fluid, @"Brightness above 100% can make white text harder to read. A paused song holds the "
                     @"background still. Animated and Visualiser use these where they show Fluid."),
+        SGNotedSection(nil, kawarpRows, @"Kawarp domain warping and Kawase blur parameters. Tap the album thumbnail in the player to toggle its visibility."),
         SGNotedSection(@"Background opacity", blur, @"Lower opacity makes each background layer more transparent. "
                     @"Canvas and lyrics sliders reduce blur strength directly; at 0% the blur is fully transparent."),
         SGNotedSection(@"Controls", @[

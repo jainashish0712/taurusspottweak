@@ -166,6 +166,7 @@ static CAGradientLayer *fill(CAShapeLayer *shape) {
         [center addObserver:self selector:@selector(updateMotionSoon) name:name object:nil];
     }
     [center addObserver:self selector:@selector(artworkChanged) name:SGRNowPlayingArtworkDidChangeNotification object:nil];
+    [center addObserver:self selector:@selector(artworkChanged) name:@"SGRKawarpParametersDidChangeNotification" object:nil];
     [center addObserver:self selector:@selector(updateBlurOpacity) name:SGRPlayerBlurOpacityDidChangeNotification object:nil];
     [self updateBlurOpacity];
     SGRObservePlayerTransition(self, ^(id owner) { [owner updateMotion]; }, ^(id owner) { [owner updateMotion]; });
@@ -832,17 +833,23 @@ struct KawarpUniforms {
     [enc setFragmentTexture:rawTexture atIndex:0];
     [enc setFragmentSamplerState:_sampler atIndex:0];
 
-    simd_float3 tintColor = simd_make_float3(0.16f, 0.16f, 0.24f);
-    float tintIntensity = 0.15f;
+    NSInteger tintRGB = SGInt(SGRKeyKawarpTintColor, 0x28283C);
+    float tr = ((tintRGB >> 16) & 0xFF) / 255.0f;
+    float tg = ((tintRGB >> 8) & 0xFF) / 255.0f;
+    float tb = (tintRGB & 0xFF) / 255.0f;
+    simd_float3 tintColor = simd_make_float3(tr, tg, tb);
+    float tintIntensity = (float)SGInt(SGRKeyKawarpTint, 15) / 100.0f;
     [enc setFragmentBytes:&tintColor length:sizeof(tintColor) atIndex:0];
     [enc setFragmentBytes:&tintIntensity length:sizeof(tintIntensity) atIndex:1];
     [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     [enc endEncoding];
 
-    // Step 2: 8 passes Kawase blur ping-ponging
+    // Step 2: Kawase blur ping-ponging
+    int blurPasses = (int)SGInt(SGRKeyKawarpBlur, 8);
+    blurPasses = MAX(1, MIN(blurPasses, 40));
     id<MTLTexture> readTex = _blurTexture1;
     id<MTLTexture> writeTex = _blurTexture2;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < blurPasses; i++) {
         pass.colorAttachments[0].texture = writeTex;
         enc = [cmd renderCommandEncoderWithDescriptor:pass];
         [enc setRenderPipelineState:_blurPipeline];
@@ -973,11 +980,16 @@ struct KawarpUniforms {
     // Crossfade blend factor
     float blend = 1.0f;
     if (_transitioning) {
-        double elapsed = CACurrentMediaTime() - _transitionStart;
-        if (elapsed >= 1.0) {
+        float transitionDuration = (float)SGInt(SGRKeyKawarpTransition, 1000) / 1000.0f;
+        if (transitionDuration <= 0.001f) {
             _transitioning = NO;
         } else {
-            blend = (float)(0.5 - 0.5 * cos(elapsed * M_PI));
+            double elapsed = CACurrentMediaTime() - _transitionStart;
+            if (elapsed >= transitionDuration) {
+                _transitioning = NO;
+            } else {
+                blend = (float)(0.5 - 0.5 * cos((elapsed / transitionDuration) * M_PI));
+            }
         }
     }
 
@@ -1000,8 +1012,8 @@ struct KawarpUniforms {
     u.time = (float)_accumulatedTime;
     u.intensity = baseIntensity;
     u.saturation = (float)SGInt(SGRKeyKawarpSaturation, 150) / 100.0f;
-    u.dithering = 0.008f;
-    u.scale = 1.0f;
+    u.dithering = (float)SGInt(SGRKeyKawarpDither, 80) / 10000.0f;
+    u.scale = (float)SGInt(SGRKeyKawarpScale, 100) / 100.0f;
     u.blend = blend;
     u.resolution = simd_make_float2((float)self.bounds.size.width, (float)self.bounds.size.height);
     [enc setFragmentBytes:&u length:sizeof(u) atIndex:0];

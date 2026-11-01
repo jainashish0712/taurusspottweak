@@ -26,9 +26,17 @@ NSArray<NSString *> *SGRPlayerBackgroundNames(void);
 #define SGRKeyPlayerLyricsBlurOpacity @"spotifyglass.redesign.player.lyricsBlurOpacity"
 #define SGRKeyPlayerVisualiserBlurOpacity @"spotifyglass.redesign.player.visualiserBlurOpacity"
 #define SGRKeyKawarpSpeed @"spotifyglass.redesign.kawarp.speed"
+#define SGRKeyKawarpWarp @"spotifyglass.redesign.kawarp.intensity"
 #define SGRKeyKawarpIntensity @"spotifyglass.redesign.kawarp.intensity"
+#define SGRKeyKawarpBlur @"spotifyglass.redesign.kawarp.blur"
+#define SGRKeyKawarpTransition @"spotifyglass.redesign.kawarp.transition"
 #define SGRKeyKawarpSaturation @"spotifyglass.redesign.kawarp.saturation"
+#define SGRKeyKawarpTint @"spotifyglass.redesign.kawarp.tint"
+#define SGRKeyKawarpTintColor @"spotifyglass.redesign.kawarp.tintColor"
+#define SGRKeyKawarpDither @"spotifyglass.redesign.kawarp.dither"
+#define SGRKeyKawarpScale @"spotifyglass.redesign.kawarp.scale"
 #define SGRKeyKawarpAudioReactive @"spotifyglass.redesign.kawarp.audioReactive"
+#define SGRKeyKawarpCoverHidden @"spotifyglass.redesign.kawarp.coverHidden"
 extern NSNotificationName const SGRPlayerBlurOpacityDidChangeNotification;
 void SGRPlayerApplyBackgroundToField(SGRArtworkField *field, SGRPlayerBackgroundKind kind);
 
@@ -50,6 +58,8 @@ CGRect SGRPlayerArtworkAreaIn(UIView *host);
 void SGRPlayerSetCoverHidden(BOOL hidden);
 CGFloat SGRPlayerCoverScale(void);
 BOOL SGRPlayerCoverShouldBeShown(void);
+void SGRPlayerUpdateCoverVisibility(BOOL animated);
+void SGRPlayerScaleEveryCover(BOOL animated);
 
 #pragma mark - the lyrics in the player (PlayerLyrics.x)
 
