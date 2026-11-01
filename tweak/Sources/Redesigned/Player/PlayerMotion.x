@@ -509,7 +509,7 @@ static void setCoverShown(BOOL shown, BOOL animated) {
     fadeCoverMask(covers, mask, 0, animated, nil);
 }
 
-static BOOL coverShouldBeShown(void) {
+BOOL SGRPlayerCoverShouldBeShown(void) {
     SGRPlayerBackgroundKind background = SGRPlayerBackground();
     return background != SGRPlayerBackgroundFill
         && !(background == SGRPlayerBackgroundAnimated
@@ -517,7 +517,7 @@ static BOOL coverShouldBeShown(void) {
 }
 
 static void updateCoverVisibility(BOOL animated) {
-    setCoverShown(coverShouldBeShown(), animated);
+    setCoverShown(SGRPlayerCoverShouldBeShown(), animated);
 }
 
 void SGRPlayerMotionFieldLaidOut(void) {

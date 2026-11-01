@@ -41,3 +41,6 @@ bool SGAudioPipelineSourceProcessorAttached(void *context); // lock-free control
 // A pull processor either handles the buffer (including an error) or leaves source unconsumed.
 typedef bool (*SGAudioPullProcessor)(UInt32 frames, AudioBufferList *data, OSStatus *status);
 void SGAudioPipelineSetPullProcessor(SGAudioPullProcessor processor);
+// Output reader (e.g. for visualiser background): mono float samples on render thread
+typedef void (*SGAudioOutputReader)(const float *samples, UInt32 count, double sampleRate);
+void SGAudioPipelineSetOutputReader(SGAudioOutputReader reader);

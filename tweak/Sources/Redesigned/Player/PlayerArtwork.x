@@ -116,6 +116,7 @@ CGRect SGRPlayerArtworkAreaIn(UIView *host) {
 static __weak UIView *sg_hiddenCover, *sg_hiddenPlate;
 
 void SGRPlayerSetCoverHidden(BOOL hidden) {
+    if (!hidden && !SGRPlayerCoverShouldBeShown()) return;
     sg_hiddenCover.alpha = SGRReduceMotion() && SGPlayerState().isPaused ? 0.75 : 1;
     sg_hiddenPlate.alpha = 1;
     sg_hiddenCover = sg_hiddenPlate = nil;
@@ -136,10 +137,11 @@ static void scaleEveryCover(BOOL animated) {
     CGFloat scale = currentScale();
     NSArray<UIView *> *tilts = sg_tilts.allObjects;
     void (^apply)(void) = ^{
+        BOOL show = SGRPlayerCoverShouldBeShown();
         for (UIView *tilt in tilts) {
             scaleCover(tilt, scale);
             UIView *cover = coverIn(tilt);
-            if (cover != sg_hiddenCover) cover.alpha = SGRReduceMotion() && SGPlayerState().isPaused ? 0.75 : 1;
+            if (cover != sg_hiddenCover) cover.alpha = show ? (SGRReduceMotion() && SGPlayerState().isPaused ? 0.75 : 1) : 0;
         }
     };
     if (animated) SGRAnimate(SGRReduceMotion() ? SGRMotionRespond : SGRMotionLayout, apply, nil);
@@ -276,6 +278,10 @@ static void watchHold(UIView *tilt) {
     plate.center = cover.center;
     // The same value an animation in flight is heading to, so a layout pass never cuts one short.
     scaleCover(tilt, currentScale());
+    if (!SGRPlayerCoverShouldBeShown()) {
+        cover.alpha = 0;
+        plate.alpha = 0;
+    }
 
     static dispatch_once_t once;
     dispatch_once(&once, ^{ SGLog(@"redesign player: cover %@ rounded %.0f with a shadow plate, scale %.2f", NSStringFromClass(cover.class), SGRRadiusArtwork, currentScale()); });

@@ -24,6 +24,7 @@
 // Threading: main thread only, but for the reader, which runs on the render thread.
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
+#import "Shared/Audio/SGAudioPipeline.h"
 #import "Shared/AudioEffects/AudioEffects.h"
 #import "Shared/Player/PlayerEvents.h"
 #import "Shared/Player/PlayerState.h"
@@ -52,15 +53,19 @@ static const NSTimeInterval kTransitionSlack = 0.05;
 
 static NSUInteger sg_readers;
 
+static void onAudioRender(const float *samples, UInt32 count, double sampleRate) {
+    SGRSpectrumFeed(samples, count, sampleRate);
+}
+
 // The reader on while any view is moving, so nothing is analyzed while none is.
 static void needReader(BOOL need) {
     if (need) {
         if (sg_readers++ == 0) {
             SGRSpectrumPrepare();
-            /* no audio reader */
+            SGAudioPipelineSetOutputReader(onAudioRender);
         }
     } else if (sg_readers && --sg_readers == 0) {
-        /* no audio reader */
+        SGAudioPipelineSetOutputReader(NULL);
     }
 }
 
@@ -168,14 +173,15 @@ static CAGradientLayer *fill(CAShapeLayer *shape) {
 }
 
 - (void)dealloc {
+    [self setReading:NO];
+    [self setMoving:NO];
     [NSNotificationCenter.defaultCenter removeObserver:self];
-    [_link invalidate];
+    if (_lyricsBlurAnimator && _lyricsBlurAnimator.state != UIViewAnimatingStateInactive) [_lyricsBlurAnimator stopAnimation:YES];
 }
 
 - (void)updateBlurOpacity {
     CGFloat opacity = MIN(100, MAX(0, SGInt(SGRKeyPlayerVisualiserBlurOpacity, 100))) / 100.0;
     _lyricsBlurAnimator = setBlurIntensity(_lyricsBlur, _lyricsBlurAnimator, _lyricsRequested ? opacity : 0);
-    if (_reading) needReader(NO);
 }
 
 #pragma mark - color
@@ -242,6 +248,8 @@ static CAGradientLayer *fill(CAShapeLayer *shape) {
 }
 
 - (void)disappear:(void (^)(void))done {
+    [self setReading:NO];
+    [self setMoving:NO];
     SGRAnimate(SGRMotionFade, ^{
         self->_content.alpha = 0;
         self->_lyricsRequested = NO;

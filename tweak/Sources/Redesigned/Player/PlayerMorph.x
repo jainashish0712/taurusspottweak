@@ -129,7 +129,7 @@ static CGFloat screenRadius(void) {
     if (bar.superview == container) [container bringSubviewToFront:bar];
 
     UIImage *artwork = SGRNowPlayingArtwork(NULL, NULL);
-    if (artwork && !CGRectIsNull(_barArtwork)) {
+    if (artwork && !CGRectIsNull(_barArtwork) && SGRPlayerCoverShouldBeShown()) {
         _cover = [[UIImageView alloc] initWithImage:artwork];
         _cover.userInteractionEnabled = NO;
         _cover.contentMode = UIViewContentModeScaleAspectFill;
@@ -196,28 +196,32 @@ static CGFloat screenRadius(void) {
         }
 
         if (self->_cover) {
-            // Worked out relative to the sheet, so the cover stays on it the whole way rather than
-            // heading for where the player's cover is while that is still below the screen.
-            CGRect from = CGRectOffset(self->_barArtwork, -self->_card.origin.x, -self->_card.origin.y);
-            if (CGRectIsNull(coverInPlayer)) {
+            if (!SGRPlayerCoverShouldBeShown()) {
                 self->_cover.hidden = YES;
             } else {
-                CGRect to = CGRectMake(middle.x + scale * (coverInPlayer.origin.x - middle.x) + shift.x + origin.x,
-                                       middle.y + scale * (coverInPlayer.origin.y - middle.y) + shift.y + origin.y,
-                                       coverInPlayer.size.width * scale, coverInPlayer.size.height * scale);
-                self->_cover.hidden = NO;
-                // The first open lays the cover out mid-way, so it is hidden once it is there.
-                if (!self->_coverHidden) {
-                    SGRPlayerSetCoverHidden(YES);
-                    self->_coverHidden = YES;
+                // Worked out relative to the sheet, so the cover stays on it the whole way rather than
+                // heading for where the player's cover is while that is still below the screen.
+                CGRect from = CGRectOffset(self->_barArtwork, -self->_card.origin.x, -self->_card.origin.y);
+                if (CGRectIsNull(coverInPlayer)) {
+                    self->_cover.hidden = YES;
+                } else {
+                    CGRect to = CGRectMake(middle.x + scale * (coverInPlayer.origin.x - middle.x) + shift.x + origin.x,
+                                           middle.y + scale * (coverInPlayer.origin.y - middle.y) + shift.y + origin.y,
+                                           coverInPlayer.size.width * scale, coverInPlayer.size.height * scale);
+                    self->_cover.hidden = NO;
+                    // The first open lays the cover out mid-way, so it is hidden once it is there.
+                    if (!self->_coverHidden) {
+                        SGRPlayerSetCoverHidden(YES);
+                        self->_coverHidden = YES;
+                    }
+                    to = CGRectOffset(to, -sheet.origin.x, -sheet.origin.y);
+                    self->_cover.frame = CGRectOffset(lerpRect(from, to, t), sheet.origin.x, sheet.origin.y);
+                    // The cover's corners are drawn under its paused shrink too.
+                    self->_cover.layer.cornerRadius = lerp(from.size.width / 2, SGRRadiusArtwork * SGRPlayerCoverScale() * scale, t);
+                    // Over an animated artwork the player's cover is hidden: the flown one fades out on the
+                    // way there instead of landing on an empty slot.
+                    self->_cover.alpha = SGRPlayerMotionShowing() ? 1 - ramp(0.6, 1, t) : 1;
                 }
-                to = CGRectOffset(to, -sheet.origin.x, -sheet.origin.y);
-                self->_cover.frame = CGRectOffset(lerpRect(from, to, t), sheet.origin.x, sheet.origin.y);
-                // The cover's corners are drawn under its paused shrink too.
-                self->_cover.layer.cornerRadius = lerp(from.size.width / 2, SGRRadiusArtwork * SGRPlayerCoverScale() * scale, t);
-                // Over an animated artwork the player's cover is hidden: the flown one fades out on the
-                // way there instead of landing on an empty slot.
-                self->_cover.alpha = SGRPlayerMotionShowing() ? 1 - ramp(0.6, 1, t) : 1;
             }
         }
     }];
@@ -239,7 +243,7 @@ static CGFloat screenRadius(void) {
     [_sheet removeFromSuperview];
     [_cover removeFromSuperview];
     [CATransaction commit];
-    if (_coverHidden) SGRPlayerSetCoverHidden(NO);
+    if (_coverHidden && SGRPlayerCoverShouldBeShown()) SGRPlayerSetCoverHidden(NO);
     _coverHidden = NO;
     _cover = nil;
 }

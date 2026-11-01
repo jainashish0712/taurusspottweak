@@ -44,6 +44,7 @@ CGRect SGRPlayerCoverFrameIn(UIView *host);
 CGRect SGRPlayerArtworkAreaIn(UIView *host);
 void SGRPlayerSetCoverHidden(BOOL hidden);
 CGFloat SGRPlayerCoverScale(void);
+BOOL SGRPlayerCoverShouldBeShown(void);
 
 #pragma mark - the lyrics in the player (PlayerLyrics.x)
 

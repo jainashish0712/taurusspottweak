@@ -20,6 +20,53 @@ static OSStatus (*originalSet)(AudioUnit, AudioUnitPropertyID, AudioUnitScope, A
 static OSStatus (*originalStart)(AudioUnit);
 static OSStatus (*originalDispose)(AudioComponentInstance);
 static atomic_bool available;
+static _Atomic(SGAudioOutputReader) outputReader;
+static _Atomic(uint64_t) outputLayout;
+static _Atomic(uint64_t) outputSampleRateBits;
+
+static inline void storeDouble(_Atomic(uint64_t) *target, double value) {
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof bits);
+    atomic_store_explicit(target, bits, memory_order_relaxed);
+}
+
+static inline double loadDouble(const _Atomic(uint64_t) *target) {
+    uint64_t bits = atomic_load_explicit(target, memory_order_relaxed);
+    double value;
+    memcpy(&value, &bits, sizeof value);
+    return value;
+}
+
+static inline float pipelineSampleAt(const void *data, UInt32 index, UInt32 bytes, BOOL isFloat, UInt32 fraction) {
+    if (bytes == 4) {
+        if (isFloat) return ((const float *)data)[index];
+        int32_t value = ((const int32_t *)data)[index];
+        return fraction ? (float)((double)value / (double)(1u << fraction)) : (float)(value / 2147483648.0);
+    }
+    return ((const int16_t *)data)[index] / 32768.0f;
+}
+
+static void readOutputFormat(AudioUnit unit) {
+    if (!unit) {
+        atomic_store_explicit(&outputLayout, 0, memory_order_relaxed);
+        storeDouble(&outputSampleRateBits, 0);
+        return;
+    }
+    AudioStreamBasicDescription format = {0};
+    UInt32 size = sizeof format;
+    OSStatus status = AudioUnitGetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &format, &size);
+    UInt32 bytes = format.mBitsPerChannel / 8;
+    BOOL takes = status == noErr && format.mFormatID == kAudioFormatLinearPCM && format.mSampleRate > 0 && format.mChannelsPerFrame >= 1
+                 && (bytes == 2 || bytes == 4) && ((format.mFormatFlags & kAudioFormatFlagIsFloat) || (format.mFormatFlags & kAudioFormatFlagIsSignedInteger));
+    if (!takes) {
+        atomic_store_explicit(&outputLayout, 0, memory_order_relaxed);
+        storeDouble(&outputSampleRateBits, 0);
+        return;
+    }
+    storeDouble(&outputSampleRateBits, format.mSampleRate);
+    uint64_t layout = ((uint64_t)bytes << 48) | ((uint64_t)(format.mChannelsPerFrame & 0xffff) << 32) | (uint64_t)format.mFormatFlags;
+    atomic_store_explicit(&outputLayout, layout, memory_order_relaxed);
+}
 
 enum { rendering = 1, changing = 2 };
 static atomic_uint gate;
@@ -193,11 +240,44 @@ static OSStatus rendered(void *context, AudioUnitRenderActionFlags *flags, const
         const SGAudioProcessor *processor = atomic_load_explicit(&processors[i], memory_order_acquire);
         if (processor && processor->output) processor->output(context, flags, time, bus, frames, data);
     }
+    SGAudioOutputReader reader = atomic_load_explicit(&outputReader, memory_order_relaxed);
+    if (reader && !(*flags & kAudioUnitRenderAction_OutputIsSilence) && data->mNumberBuffers > 0) {
+        uint64_t layout = atomic_load_explicit(&outputLayout, memory_order_relaxed);
+        double sampleRate = loadDouble(&outputSampleRateBits);
+        if (layout != 0 && sampleRate > 0) {
+            UInt32 formatFlags = (UInt32)layout, channels = (UInt32)(layout >> 32) & 0xffff, bytes = (UInt32)(layout >> 48);
+            BOOL isFloat = (formatFlags & kAudioFormatFlagIsFloat) != 0;
+            BOOL split = (formatFlags & kAudioFormatFlagIsNonInterleaved) != 0;
+            UInt32 fraction = (formatFlags & kLinearPCMFormatFlagsSampleFractionMask) >> kLinearPCMFormatFlagsSampleFractionShift;
+            BOOL fits = split ? data->mNumberBuffers == channels : data->mNumberBuffers == 1 && data->mBuffers[0].mNumberChannels == channels;
+            for (UInt32 b = 0; fits && b < data->mNumberBuffers; b++) {
+                fits = data->mBuffers[b].mData && data->mBuffers[b].mDataByteSize == frames * bytes * (split ? 1 : channels);
+            }
+            if (fits) {
+                const void *left = data->mBuffers[0].mData;
+                const void *right = (split && channels > 1) ? data->mBuffers[1].mData : left;
+                UInt32 stride = split ? 1 : channels;
+                UInt32 rightOffset = (!split && channels > 1) ? 1 : 0;
+                static float monoBuf[1024];
+                for (UInt32 done = 0; done < frames;) {
+                    UInt32 count = MIN(frames - done, 1024u);
+                    for (UInt32 i = 0; i < count; i++) {
+                        UInt32 at = (done + i) * stride;
+                        monoBuf[i] = 0.5f * (pipelineSampleAt(left, at, bytes, isFloat, fraction) +
+                                            pipelineSampleAt(right, at + rightOffset, bytes, isFloat, fraction));
+                    }
+                    reader(monoBuf, count, sampleRate);
+                    done += count;
+                }
+            }
+        }
+    }
     leaveRender();
     return noErr;
 }
 
 static void prepare(AudioUnit unit) {
+    readOutputFormat(unit);
     for (unsigned i = 0; i < SGAudioStageCount; i++) {
         const SGAudioProcessor *processor = atomic_load(&processors[i]);
         if (processor && processor->prepare) processor->prepare(unit);
@@ -355,6 +435,7 @@ static OSStatus dispose(AudioComponentInstance unit) {
         AudioUnitRemovePropertyListenerWithUserData(unit, kAudioUnitProperty_StreamFormat, formatChanged, NULL);
         atomic_store(&outputUnit, NULL);
         atomic_store(&sourceUnit, NULL);
+        readOutputFormat(NULL);
     } else if (unit == atomic_load(&sourceUnit)) {
         replaceSourceProcessor(NULL, NULL);
         atomic_store(&sourceUnit, NULL);
@@ -386,4 +467,13 @@ bool SGAudioPipelineRegister(SGAudioStage stage, const SGAudioProcessor *process
     atomic_store(&processors[stage], processor);
     install();
     return SGAudioPipelineAvailable();
+}
+
+void SGAudioPipelineSetOutputReader(SGAudioOutputReader reader) {
+    if (reader && atomic_load_explicit(&outputLayout, memory_order_relaxed) == 0) {
+        AudioUnit unit = atomic_load(&outputUnit);
+        if (unit) readOutputFormat(unit);
+    }
+    atomic_store_explicit(&outputReader, reader, memory_order_release);
+    install();
 }
