@@ -269,7 +269,7 @@ static void report(void) {
     SGTimePitch *unit = atomic_load(tapped() ? &sg_chain : &sg_inPlace);
     if (!unit) return;
     SGLog(@"redesign speed: %.2fx, %@, %u underruns, %u failures, largest pull %u, %.1f s of input", sg_speed,
-          SGTimePitchIsVarispeed(unit) ? @"pitch following" : [NSString stringWithFormat:@"%+.0f st", sg_semitones],
+          SGTimePitchIsVarispeed(unit) ? @"pitch following" : [NSString stringWithFormat:fabsf(sg_semitones - roundf(sg_semitones)) < 0.05f ? @"%+.0f st" : @"%+.1f st", sg_semitones],
           SGTimePitchUnderruns(unit), SGTimePitchFailures(unit), SGTimePitchLargestPull(unit),
           SGTimePitchConsumed(unit) / SGTimePitchSampleRate(unit));
 }

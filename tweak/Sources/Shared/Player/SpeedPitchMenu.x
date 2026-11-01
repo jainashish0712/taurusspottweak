@@ -50,6 +50,7 @@ static void animateOpen(void (^animations)(void), void (^completion)(BOOL finish
 }
 static const float kMinSpeed = 0.5f, kMaxSpeed = 2, kSpeedStep = 0.05f;
 static const float kMaxPitch = 12;
+static const float kPitchStep = 0.4f;
 // Speed is applied at most this often while the slider moves.
 static const NSTimeInterval kSpeedInterval = 0.05;
 
@@ -268,9 +269,20 @@ static NSString *speedText(float speed) {
     return [NSString stringWithFormat:@"%.2f×", speed];
 }
 
+static float snappedPitch(float value) {
+    float steps = roundf(value / kPitchStep);
+    float pitch = roundf(steps * 4.0f) / 10.0f;
+    if (fabsf(pitch) < kPitchStep * 0.5f) return 0;
+    if (pitch < -kMaxPitch) pitch = -kMaxPitch;
+    if (pitch > kMaxPitch) pitch = kMaxPitch;
+    return pitch;
+}
+
 static NSString *pitchText(float pitch) {
     if (pitch == 0) return @"0";
-    return [NSString stringWithFormat:@"%@%.0f", pitch > 0 ? @"+" : @"−", fabsf(pitch)];
+    float absPitch = fabsf(pitch);
+    BOOL whole = fabsf(absPitch - roundf(absPitch)) < 0.05f;
+    return [NSString stringWithFormat:whole ? @"%@%.0f" : @"%@%.1f", pitch > 0 ? @"+" : @"−", whole ? roundf(absPitch) : absPitch];
 }
 
 static NSString *reverbText(float amount) {
@@ -299,7 +311,7 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
 - (void)refresh {
     BOOL speedAllowed = SGPlayerSpeedAllowed(), pitchAvailable = SGPlayerPitchAvailable();
     if (!_speed.tracking) _shownSpeed = snappedSpeed(SGPlayerSpeed());
-    if (!_pitch.tracking) _shownPitch = SGPlayerPitch();
+    if (!_pitch.tracking) _shownPitch = snappedPitch(SGPlayerPitch());
     if (!_reverb.tracking) _shownReverb = SGDSPNumber(SGKeyDSPReverbAmount);
     _speed.value = _shownSpeed;
     _pitch.value = _shownPitch;
@@ -330,7 +342,8 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
     BOOL follows = SGPlayerPitchFollowsSpeed();
     NSString *followed = follows ? followedPitchText(_shownSpeed) : nil;
     _speed.accessibilityValue = !speedAllowed ? @"Unavailable" : followed ? [NSString stringWithFormat:@"%@, pitch %@", speedText(_shownSpeed), followed] : speedText(_shownSpeed);
-    _pitch.accessibilityValue = _shownPitch == 0 ? @"Original pitch" : [NSString stringWithFormat:@"%.0f semitones %@", fabsf(_shownPitch), _shownPitch > 0 ? @"up" : @"down"];
+    BOOL pitchWhole = fabsf(fabsf(_shownPitch) - roundf(fabsf(_shownPitch))) < 0.05f;
+    _pitch.accessibilityValue = _shownPitch == 0 ? @"Original pitch" : [NSString stringWithFormat:pitchWhole ? @"%.0f semitones %@" : @"%.1f semitones %@", fabsf(_shownPitch), _shownPitch > 0 ? @"up" : @"down"];
     _reverb.accessibilityValue = reverbText(_shownReverb);
 
     NSString *summary = summaryText(_shownSpeed, YES, _shownPitch, follows, _shownReverb, SGDSPSwitch(SGKeyDSPReverb));
@@ -394,7 +407,7 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
 
 - (void)followChanged {
     SGSetPlayerPitchFollowsSpeed(_follow.on);
-    _shownPitch = SGPlayerPitch();
+    _shownPitch = snappedPitch(SGPlayerPitch());
     _pitch.value = _shownPitch;
     [self resize];
     UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, nil);
@@ -424,7 +437,7 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
             });
         }
     } else if (slider == _pitch) {
-        float pitch = roundf(slider.value);
+        float pitch = snappedPitch(slider.value);
         if (pitch == _shownPitch) return;
         if (pitch == 0 || _shownPitch == 0) SGPlayFeedback(SGFeedbackDetent);
         _shownPitch = pitch;
@@ -487,7 +500,7 @@ UIView *SGSpeedPitchPanelMake(void) {
 }
 
 NSString *SGSpeedPitchSummary(void) {
-    return summaryText(snappedSpeed(SGPlayerSpeed()), SGPlayerSpeedAllowed(), SGPlayerPitch(), SGPlayerPitchFollowsSpeed(),
+    return summaryText(snappedSpeed(SGPlayerSpeed()), SGPlayerSpeedAllowed(), snappedPitch(SGPlayerPitch()), SGPlayerPitchFollowsSpeed(),
                        SGDSPNumber(SGKeyDSPReverbAmount), SGDSPSwitch(SGKeyDSPReverb));
 }
 

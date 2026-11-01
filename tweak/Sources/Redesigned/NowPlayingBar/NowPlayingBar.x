@@ -16,7 +16,7 @@ static char kGlassKey, kProgressViewKey, kProgressAlphaKey;
 static __weak UIVisualEffectView *sg_cardGlass;
 static __weak UIView *sg_cardArtwork;
 static __weak UIView *sg_cardContent;
-static __weak UIView *sg_progressLine;
+static NSHashTable<UIView *> *sg_progressLines;
 static __weak UIView *sg_miniProgressView;
 static __weak UIViewController *sg_container;
 static BOOL sg_docked;
@@ -118,7 +118,11 @@ static CGFloat progressThickness(void) {
 @end
 
 static BOOL isProgressLine(UIView *view, UIView *card) {
-    if (view == card || !view.superview) return NO;
+    if (view == card || !view.superview || [view isKindOfClass:[SGRMiniProgressView class]]) return NO;
+    NSString *name = NSStringFromClass(view.class);
+    if ([name containsString:@"ProgressBar"] || [name containsString:@"SeekBar"] || [view isKindOfClass:UISlider.class]) {
+        return YES;
+    }
     CGSize size = view.bounds.size;
     if (size.height <= 0 || size.height > 10 || size.width < MAX(200, card.bounds.size.width * 0.7)) return NO;
     CGRect frame = [view convertRect:view.bounds toView:card];
@@ -126,14 +130,14 @@ static BOOL isProgressLine(UIView *view, UIView *card) {
 }
 
 static void updateMiniProgress(void) {
-    UIView *line = sg_progressLine;
     UIView *custom = sg_miniProgressView;
     if (!custom) return;
     BOOL transitioning = !SGIsInside(custom, sgr_nowPlayingRoot) || SGPlayerTransitionEnds() > 0;
-    if (line) {
+    for (UIView *line in sg_progressLines) {
         NSNumber *originalAlpha = objc_getAssociatedObject(line, &kProgressAlphaKey);
         BOOL hideOriginal = !transitioning && SGIsInside(line, sgr_nowPlayingRoot);
         if (originalAlpha) line.alpha = hideOriginal ? 0 : originalAlpha.doubleValue;
+        if ([line isKindOfClass:UIControl.class]) line.userInteractionEnabled = !hideOriginal;
     }
     custom.hidden = transitioning || progressThickness() <= 0;
     if (transitioning) return;
@@ -145,19 +149,16 @@ static void updateMiniProgress(void) {
 }
 
 static void ensureMiniProgress(UIView *card) {
-    __block UIView *line = nil;
-    SGForEachView(card, ^(UIView *view) {
-        if (!line && isProgressLine(view, card)) line = view;
+    if (!sg_progressLines) sg_progressLines = [NSHashTable weakObjectsHashTable];
+    UIView *root = sgr_nowPlayingRoot ?: card;
+    SGForEachView(root, ^(UIView *view) {
+        if (isProgressLine(view, card)) {
+            if (!objc_getAssociatedObject(view, &kProgressAlphaKey)) {
+                objc_setAssociatedObject(view, &kProgressAlphaKey, @(view.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+            [sg_progressLines addObject:view];
+        }
     });
-
-    if (sg_progressLine && sg_progressLine != line) {
-        NSNumber *oldAlpha = objc_getAssociatedObject(sg_progressLine, &kProgressAlphaKey);
-        if (oldAlpha) sg_progressLine.alpha = oldAlpha.doubleValue;
-    }
-    sg_progressLine = line;
-    if (line && !objc_getAssociatedObject(line, &kProgressAlphaKey)) {
-        objc_setAssociatedObject(line, &kProgressAlphaKey, @(line.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
 
     SGRMiniProgressView *progress = objc_getAssociatedObject(card, &kProgressViewKey);
     if (!progress) {

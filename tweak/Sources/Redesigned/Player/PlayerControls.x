@@ -390,11 +390,24 @@ static void watchSlider(UIView *host) {
 // it out again and again, and the app hangs.
 static const CGFloat kSeekTrackRest = 7, kSeekTrackHeld = 18;
 
+static BOOL isNowPlayingBar(UIView *view) {
+    if (!view) return NO;
+    if (sgr_nowPlayingRoot && SGIsInside(view, sgr_nowPlayingRoot)) return YES;
+    if (sgr_nowPlayingCard && SGIsInside(view, sgr_nowPlayingCard)) return YES;
+    for (UIView *v = view; v; v = v.superview) {
+        NSString *cls = NSStringFromClass(v.class);
+        if ([cls containsString:@"NowPlayingBar"] || [cls containsString:@"NowPlaying_Bar"]) return YES;
+    }
+    return NO;
+}
+
 %hook _TtCO17NowPlaying_ECMKit11ProgressBar6Slider
 - (BOOL)isTracking {
+    if (isNowPlayingBar((UIView *)self)) return %orig;
     return ((UISlider *)self == sg_seekSlider && seekHeld()) || %orig;
 }
 - (CGRect)trackRectForBounds:(CGRect)bounds {
+    if (isNowPlayingBar((UIView *)self)) return %orig;
     CGRect track = %orig;
     UISlider *slider = (UISlider *)self;
     CGFloat height = slider.isTracking ? kSeekTrackHeld : kSeekTrackRest, midY = CGRectGetMidY(track);
@@ -402,12 +415,18 @@ static const CGFloat kSeekTrackRest = 7, kSeekTrackHeld = 18;
 }
 - (void)didMoveToWindow {
     %orig;
+    if (isNowPlayingBar((UIView *)self)) {
+        ((UIView *)self).alpha = 0;
+        ((UIView *)self).userInteractionEnabled = NO;
+        return;
+    }
     UISlider *slider = (UISlider *)self;
     slider.minimumTrackTintColor = UIColor.whiteColor;
     slider.maximumTrackTintColor = [UIColor colorWithWhite:1 alpha:0.24];
     slider.thumbTintColor = slider.isTracking ? UIColor.whiteColor : UIColor.clearColor;
 }
 - (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    if (isNowPlayingBar((UIView *)self)) return %orig;
     BOOL began = %orig;
     if (began) {
         UISlider *slider = (UISlider *)self;
@@ -420,12 +439,14 @@ static const CGFloat kSeekTrackRest = 7, kSeekTrackHeld = 18;
 }
 - (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
     %orig;
+    if (isNowPlayingBar((UIView *)self)) return;
     UISlider *slider = (UISlider *)self;
     slider.thumbTintColor = UIColor.clearColor;
     [slider setNeedsLayout];
 }
 - (void)cancelTrackingWithEvent:(UIEvent *)event {
     %orig;
+    if (isNowPlayingBar((UIView *)self)) return;
     UISlider *slider = (UISlider *)self;
     slider.thumbTintColor = UIColor.clearColor;
     [slider setNeedsLayout];

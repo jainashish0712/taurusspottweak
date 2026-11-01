@@ -30,7 +30,12 @@ static NSString *speedText(double speed) {
 
 static NSString *semitonesText(float semitones) {
     if (semitones == 0) return @"Original";
-    return [NSString stringWithFormat:@"%@%.0f %@", semitones > 0 ? @"+" : @"−", fabsf(semitones), fabsf(semitones) == 1 ? @"Semitone" : @"Semitones"];
+    float absPitch = fabsf(semitones);
+    BOOL whole = fabsf(absPitch - roundf(absPitch)) < 0.05f;
+    return [NSString stringWithFormat:whole ? @"%@%.0f %@" : @"%@%.1f %@",
+            semitones > 0 ? @"+" : @"−",
+            whole ? roundf(absPitch) : absPitch,
+            fabsf(semitones) == 1 ? @"Semitone" : @"Semitones"];
 }
 
 // While pitch follows a speed that is not normal, the speed sets the pitch and the semitones are not played
