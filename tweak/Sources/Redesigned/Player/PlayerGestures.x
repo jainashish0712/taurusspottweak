@@ -6,7 +6,7 @@
 - (void)handleTap {
     if (SGRPlayerKawarpShowing()) {
         BOOL hidden = !SGFlag(SGRKeyKawarpCoverHidden, NO);
-        SGSetFlag(SGRKeyKawarpCoverHidden, hidden);
+        SGSetEnabled(SGRKeyKawarpCoverHidden, hidden);
         SGRPlayerUpdateCoverVisibility(YES);
         return;
     }

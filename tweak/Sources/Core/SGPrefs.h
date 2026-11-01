@@ -6,6 +6,7 @@ BOOL SGFlag(NSString *key, BOOL fallback);
 BOOL SGEnabled(NSString *key);   // an unset switch is on
 BOOL SGHidden(NSString *key);    // an unset switch is off
 void SGSetEnabled(NSString *key, BOOL on);
+static inline void SGSetFlag(NSString *key, BOOL on) { SGSetEnabled(key, on); }
 
 NSInteger SGInt(NSString *key, NSInteger fallback);
 void SGSetInt(NSString *key, NSInteger value);

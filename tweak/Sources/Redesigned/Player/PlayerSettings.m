@@ -232,7 +232,7 @@ static NSArray<NSString *> *backgroundNotes(void) {
 - (void)coverTapped {
     if (SGRPlayerKawarpShowing()) {
         BOOL hidden = !SGFlag(SGRKeyKawarpCoverHidden, NO);
-        SGSetFlag(SGRKeyKawarpCoverHidden, hidden);
+        SGSetEnabled(SGRKeyKawarpCoverHidden, hidden);
         SGRPlayerUpdateCoverVisibility(YES);
         [self reloadCoverVisibilityAnimated:YES];
     }
