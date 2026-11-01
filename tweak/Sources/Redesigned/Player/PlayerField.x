@@ -45,7 +45,7 @@ SGRArtworkField *SGRPlayerField(void) {
 
 SGRPlayerBackgroundKind SGRPlayerBackground(void) {
     NSInteger kind = SGInt(SGRKeyPlayerBackground, SGEnabled(SGRKeyPlayerMotion) ? SGRPlayerBackgroundColours : SGRPlayerBackgroundStill);
-    return kind >= SGRPlayerBackgroundStill && kind <= SGRPlayerBackgroundFill ? kind : SGRPlayerBackgroundColours;
+    return kind >= SGRPlayerBackgroundStill && kind <= SGRPlayerBackgroundKawarp ? kind : SGRPlayerBackgroundColours;
 }
 
 SGRPlayerBackgroundKind SGRPlayerAnimatedFallback(void) {
@@ -55,6 +55,7 @@ SGRPlayerBackgroundKind SGRPlayerAnimatedFallback(void) {
         SGRPlayerBackgroundFluid,
         SGRPlayerBackgroundVisualiser,
         SGRPlayerBackgroundFill,
+        SGRPlayerBackgroundKawarp,
     };
     NSInteger index = SGInt(SGRKeyPlayerAnimatedFallback, (NSInteger)(sizeof choices / sizeof *choices) - 1);
     if (index < 0 || index >= (NSInteger)(sizeof choices / sizeof *choices)) index = (NSInteger)(sizeof choices / sizeof *choices) - 1;
@@ -62,7 +63,7 @@ SGRPlayerBackgroundKind SGRPlayerAnimatedFallback(void) {
 }
 
 NSArray<NSString *> *SGRPlayerBackgroundNames(void) {
-    return @[@"Still", @"Colors", @"Fluid", @"Animated", @"Visualiser", @"Fill"];
+    return @[@"Still", @"Colors", @"Fluid", @"Animated", @"Visualiser", @"Fill", @"Kawarp"];
 }
 
 void SGRPlayerApplyBackgroundToField(SGRArtworkField *field, SGRPlayerBackgroundKind kind) {
@@ -82,7 +83,7 @@ void SGRPlayerApplyBackgroundToField(SGRArtworkField *field, SGRPlayerBackground
 // the field: an animated artwork's clip, which covers it (PlayerMotion.x), or the Visualizer's hills, which are
 // the one thing moving.
 static BOOL fieldHeld(void) {
-    return SGPlayerState().isPaused || SGRPlayerMotionShowing() || SGRPlayerVisualiserShowing();
+    return SGPlayerState().isPaused || SGRPlayerMotionShowing() || SGRPlayerVisualiserShowing() || SGRPlayerKawarpShowing();
 }
 
 void SGRPlayerHoldField(void) {
@@ -158,6 +159,7 @@ static SGRArtworkField *fieldIn(UIView *plane) {
     if (!CGRectEqualToRect(field.frame, plane.bounds)) field.frame = plane.bounds;
     SGRPlayerMotionFieldLaidOut();
     SGRPlayerVisualiserUpdate();
+    SGRPlayerKawarpUpdate();
 }
 
 - (void)backgroundViewModel:(id)model didChangeColor:(id)color playerState:(id)state {

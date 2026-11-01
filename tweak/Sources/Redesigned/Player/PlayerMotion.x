@@ -671,6 +671,7 @@ static void clear(BOOL animated) {
     animated = animated && seen(old);
     updateCoverVisibility(animated);
     SGRPlayerVisualiserUpdate();
+    SGRPlayerKawarpUpdate();
     if (animated) [old disappear:^{ [old removeFromSuperview]; }];
     else [old removeFromSuperview];
 }
@@ -694,6 +695,7 @@ static void show(NSString *track, NSURL *file) {
         sg_motionFile = file;
         sg_motionPoster = poster;
         SGRPlayerVisualiserUpdate();
+        SGRPlayerKawarpUpdate();
         layOut();
         holdField();
         BOOL blurLyrics = SGRPlayerLyricsOpen() && lyricsBlurEnabledForTrack(track);
@@ -756,7 +758,7 @@ static void restartAnimatedArtwork(void) {
 }
 
 void SGRPlayerMenuSetBackground(SGRPlayerBackgroundKind kind) {
-    if (kind < SGRPlayerBackgroundStill || kind > SGRPlayerBackgroundFill) {
+    if (kind < SGRPlayerBackgroundStill || kind > SGRPlayerBackgroundKawarp) {
         SGLog(@"redesign player: ignored invalid background style %ld", (long)kind);
         return;
     }
@@ -769,6 +771,7 @@ void SGRPlayerMenuSetBackground(SGRPlayerBackgroundKind kind) {
     [field refreshStyleAnimated:YES];
     if (current == SGRPlayerBackgroundAnimated || kind == SGRPlayerBackgroundAnimated) restartAnimatedArtwork();
     SGRPlayerVisualiserUpdate();
+    SGRPlayerKawarpUpdate();
     SGRPlayerHoldField();
     updateCoverVisibility(YES);
     SGLog(@"redesign player: background switched to %@ from the menu", SGRPlayerBackgroundNames()[(NSUInteger)kind]);

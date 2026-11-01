@@ -45,9 +45,10 @@ static NSArray<NSString *> *backgroundNotes(void) {
         @"The cover, blurred and held still.",
         @"The cover's colors, drifting slowly.",
         @"The cover itself, blurred and slowly turning. It rests while a song is paused.",
-        @"The song's Canvas or the album's moving cover, else Fluid. The player's ⋯ menu switches between all six backgrounds.",
+        @"The song's Canvas or the album's moving cover, else Fluid. The player's ⋯ menu switches between all seven backgrounds.",
         @"The song's sound as gentle hills in the cover's colors, over Fluid held still. They settle while a song is paused.",
         @"The cover fades into progressively stronger blur over a dark tint sampled from its lower edge.",
+        @"Fluid domain warping over the cover using Kawase blur and multi-octave simplex noise.",
     ];
 }
 
@@ -59,7 +60,7 @@ static NSArray<NSString *> *backgroundNotes(void) {
 
 @implementation SGRPlayerShowcase {
     SGRArtworkField *_field;
-    UIView *_motion, *_visualiser;
+    UIView *_motion, *_visualiser, *_kawarp;
     UIImageView *_cover;
     SGMarqueeLabel *_title, *_artist;
     UIView *_progress, *_progressFill;
@@ -207,7 +208,11 @@ static NSArray<NSString *> *backgroundNotes(void) {
         self->_visualiser = effectiveKind == SGRPlayerBackgroundVisualiser && !self->_motion
             ? SGRPlayerVisualiserPreview() : nil;
         if (self->_visualiser) [self insertSubview:self->_visualiser aboveSubview:self->_field];
-        self->_field.motionHeld = SGPlayerState().isPaused || self->_motion != nil || self->_visualiser != nil;
+        [self->_kawarp removeFromSuperview];
+        self->_kawarp = effectiveKind == SGRPlayerBackgroundKawarp && !self->_motion
+            ? SGRPlayerKawarpPreview() : nil;
+        if (self->_kawarp) [self insertSubview:self->_kawarp aboveSubview:self->_field];
+        self->_field.motionHeld = SGPlayerState().isPaused || self->_motion != nil || self->_visualiser != nil || self->_kawarp != nil;
     };
     self.accessibilityValue = [SGRPlayerBackgroundNames()[(NSUInteger)kind] stringByAppendingString:@" background"];
     if (animated && self.window) {
@@ -234,6 +239,7 @@ static NSArray<NSString *> *backgroundNotes(void) {
     _field.backdropHeight = h;
     _motion.frame = bounds;
     _visualiser.frame = bounds;
+    _kawarp.frame = bounds;
 
     _cover.frame = CGRectMake(kCardPadding, h - kCardPadding - kCoverSide, kCoverSide, kCoverSide);
     CGFloat x = CGRectGetMaxX(_cover.frame) + 12, width = w - kCardPadding - x;
@@ -384,7 +390,7 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
     SGModRow *animatedFallback = SGChoiceRow(@"Animated fallback",
                                                @"Background shown when Canvas is unavailable or cannot play",
                                                SGRKeyPlayerAnimatedFallback,
-                                               @[@"Still", @"Colors", @"Fluid", @"Visualiser", @"Fill"], 4);
+                                               @[@"Still", @"Colors", @"Fluid", @"Visualiser", @"Fill", @"Kawarp"], 5);
     animatedFallback.visible = lowData.visible;
     animatedFallback.chosen = ^(NSInteger index) {
         (void)index;
@@ -393,6 +399,7 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
         [field refreshStyleAnimated:YES];
         SGRPlayerMotionCoverLaidOut();
         SGRPlayerVisualiserUpdate();
+        SGRPlayerKawarpUpdate();
         SGRPlayerHoldField();
         [weakShowcase reloadBackgroundAnimated:NO];
         [weakPage.tableView reloadData];

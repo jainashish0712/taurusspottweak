@@ -129,6 +129,7 @@ static CGFloat moveTo(UIView *arranged, UIView *view, CGPoint point, UIView *hos
 void SGRPlayerLyricsChanged(void) {
     SGRPlayerMotionLyricsChanged();
     SGRPlayerVisualiserUpdate();
+    SGRPlayerKawarpUpdate();
     SGRGlyphButton *glyph = sg_lyricsGlyph;
     if (!glyph) return;
     BOOL enabled = SGRPlayerLyricsAvailable() || SGRPlayerLyricsOpen(), open = SGRPlayerLyricsOpen();

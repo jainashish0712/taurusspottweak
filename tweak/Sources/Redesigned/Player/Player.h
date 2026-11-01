@@ -13,6 +13,7 @@ typedef NS_ENUM(NSInteger, SGRPlayerBackgroundKind) {
     SGRPlayerBackgroundAnimated,
     SGRPlayerBackgroundVisualiser,
     SGRPlayerBackgroundFill,
+    SGRPlayerBackgroundKawarp,
 };
 SGRPlayerBackgroundKind SGRPlayerBackground(void);
 SGRPlayerBackgroundKind SGRPlayerAnimatedFallback(void);
@@ -99,6 +100,11 @@ CGFloat SGRPlayerClipDim(CGFloat luminance, BOOL contrast, BOOL lyrics);
 BOOL SGRPlayerVisualiserShowing(void);
 void SGRPlayerVisualiserUpdate(void);
 UIView *SGRPlayerVisualiserPreview(void);
+
+BOOL SGRPlayerKawarpShowing(void);
+void SGRPlayerKawarpUpdate(void);
+UIView *SGRPlayerKawarpPreview(void);
+
 void SGRPlayerMenuSetBackground(SGRPlayerBackgroundKind kind);
 
 void SGRPlayerVanish(UIView *view);
