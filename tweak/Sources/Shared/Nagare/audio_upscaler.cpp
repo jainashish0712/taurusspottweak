@@ -265,8 +265,8 @@ static void apply_sbr(float* real, float* imag, int num_bins, float cutoff_freq,
 static void apply_harmonic_extension(float* real, float* imag, int num_bins,
                                      float amount, int sample_rate) {
     if (amount < 0.01f) return;
+    (void)sample_rate;
 
-    float bin_freq = (float)sample_rate / FFT_SIZE;
     int max_bin = num_bins / 2;
 
     // Find prominent frequencies and add their harmonics
@@ -300,48 +300,6 @@ static void apply_harmonic_extension(float* real, float* imag, int num_bins,
                 }
             }
         }
-    }
-}
-
-// ============================================================================
-// Transient Enhancement
-// ============================================================================
-
-static float detect_transient(float* samples, int num_samples) {
-    // Simple energy-based transient detection
-    float energy = 0.0f;
-    for (int i = 0; i < num_samples; i++) {
-        energy += samples[i] * samples[i];
-    }
-    energy /= num_samples;
-
-    float diff = energy - g_upscaler.prev_energy;
-    g_upscaler.prev_energy = energy * 0.9f + g_upscaler.prev_energy * 0.1f;
-
-    // Transient if energy increased significantly
-    if (diff > g_upscaler.prev_energy * 0.5f && energy > 0.001f) {
-        return std::min(diff / (g_upscaler.prev_energy + 0.001f), 3.0f);
-    }
-
-    return 0.0f;
-}
-
-static void apply_transient_enhancement(float* real, float* imag, int num_bins,
-                                        float transient_strength) {
-    if (transient_strength < 0.1f) return;
-
-    int max_bin = num_bins / 2;
-
-    // Enhance high frequencies during transients
-    // This sharpens the attack
-    float enhancement = 1.0f + transient_strength * 0.3f;
-
-    int start_bin = max_bin / 4;  // Start from ~5kHz
-    for (int i = start_bin; i < max_bin; i++) {
-        float freq_factor = (float)(i - start_bin) / (max_bin - start_bin);
-        float gain = 1.0f + (enhancement - 1.0f) * freq_factor;
-        real[i] *= gain;
-        imag[i] *= gain;
     }
 }
 

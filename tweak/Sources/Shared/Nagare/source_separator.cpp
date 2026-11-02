@@ -49,7 +49,6 @@ static constexpr float TWO_PI = 2.0f * PI;
 
 // Frequency ranges (in bins at 44.1kHz with 2048 FFT)
 static constexpr int BASS_CUTOFF_BIN = 10;     // ~215 Hz
-static constexpr int LOW_MID_BIN = 25;         // ~538 Hz
 static constexpr int VOCAL_LOW_BIN = 15;       // ~322 Hz
 static constexpr int VOCAL_HIGH_BIN = 400;     // ~8.6 kHz
 
@@ -173,10 +172,6 @@ static void create_hann_window(float* window, int size) {
 
 static inline float get_magnitude(float real, float imag) {
     return sqrtf(real * real + imag * imag);
-}
-
-static inline float get_phase(float real, float imag) {
-    return atan2f(imag, real);
 }
 
 // ============================================================================

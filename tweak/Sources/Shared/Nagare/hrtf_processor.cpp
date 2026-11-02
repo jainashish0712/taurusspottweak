@@ -500,7 +500,7 @@ static bool interpolate_custom_hrir(float angle) {
         auto& hi = g_custom_hrirs[upper_idx];
         float range = hi.azimuth - lo.azimuth;
         float t = (range > 0.001f) ? (angle - lo.azimuth) / range : 0.0f;
-        t = std::clamp(t, 0.0f, 1.0f);
+        t = std::max(0.0f, std::min(t, 1.0f));
 
         lerp_hrir(g_hrir_ipsi, lo.left_hrir.data(), lo.length,
                   hi.left_hrir.data(), hi.length, t, HRIR_LENGTH);
@@ -654,16 +654,16 @@ bool hrtf_is_enabled(void) {
 }
 
 void hrtf_set_speaker_angle(float angle_degrees) {
-    hrtf::g_speaker_angle = std::clamp(angle_degrees, 0.0f, 90.0f);
+    hrtf::g_speaker_angle = std::max(0.0f, std::min(angle_degrees, 90.0f));
     hrtf::interpolate_hrir(hrtf::g_speaker_angle);
 }
 
 void hrtf_set_room_size(float size) {
-    hrtf::g_room_size = std::clamp(size, 0.0f, 1.0f);
+    hrtf::g_room_size = std::max(0.0f, std::min(size, 1.0f));
 }
 
 void hrtf_set_distance(float distance_meters) {
-    hrtf::g_distance = std::clamp(distance_meters, 0.5f, 10.0f);
+    hrtf::g_distance = std::max(0.5f, std::min(distance_meters, 10.0f));
 }
 
 void hrtf_process(float* left, float* right, int num_frames) {

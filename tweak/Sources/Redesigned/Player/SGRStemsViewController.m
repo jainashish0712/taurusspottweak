@@ -4,7 +4,6 @@
 #import "Shared/Nagare/SGNagareBridge.h"
 
 static const CGFloat kPadding = 18.0;
-static const CGFloat kRowHeight = 52.0;
 
 @interface SGRStemsViewController () <UIScrollViewDelegate>
 @property (nonatomic, strong) UIVisualEffectView *blurView;

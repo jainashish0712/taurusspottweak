@@ -41,6 +41,15 @@
 #include <complex>
 #include <memory>
 
+#if __cplusplus < 201703L || !defined(__cpp_lib_clamp)
+namespace std {
+template <typename T>
+static inline constexpr const T& clamp(const T& v, const T& lo, const T& hi) {
+    return (v < lo) ? lo : (hi < v) ? hi : v;
+}
+}
+#endif
+
 // A/B comparison switch. 0 = shipping behaviour. Build with
 // -DNAGARE_AB_ORIGINAL=1 to reproduce the pre-audit DSP (crossfeed without
 // the interaural delay) for listening comparisons. Ships as 0.
@@ -98,9 +107,7 @@ inline void enableDenormalFlushOnThisThread() {
 // Constants
 // ============================================================================
 
-static constexpr float PI = 3.14159265358979323846f;
 static constexpr float TWO_PI = 6.28318530717958647692f;
-static constexpr int MAX_FFT_SIZE = 8192;
 static constexpr int EQ_BANDS = 10;
 
 // Q used by the 10-band graphic EQ. Bands keep this unless a caller overrides

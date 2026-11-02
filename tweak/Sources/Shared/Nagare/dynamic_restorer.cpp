@@ -46,7 +46,6 @@
 // Constants
 // ============================================================================
 
-static constexpr float PI = 3.14159265358979323846f;
 static constexpr float TWO_PI = 6.28318530717958647692f;
 static constexpr int HISTORY_SIZE = 512;
 static constexpr int LUFS_WINDOW_SEC = 3;
