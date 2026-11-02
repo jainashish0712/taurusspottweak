@@ -6,31 +6,30 @@
 #import "SGRStemsPage.h"
 
 @interface SGRStemsPage ()
+@property (nonatomic, strong) UIView *navBar;
+@property (nonatomic, strong) UIButton *backButton;
+@property (nonatomic, strong) UILabel *titleLabel;
+
+@property (nonatomic, strong) UIView *initialView;
+@property (nonatomic, strong) UIButton *separateButton;
+@property (nonatomic, strong) UILabel *hintLabel;
+@property (nonatomic, strong) UIActivityIndicatorView *spinner;
+
+@property (nonatomic, strong) UIView *slidersView;
+@property (nonatomic, strong) UILabel *vocalsLabel, *vocalsValue;
+@property (nonatomic, strong) UISlider *vocalsSlider;
+@property (nonatomic, strong) UILabel *drumsLabel, *drumsValue;
+@property (nonatomic, strong) UISlider *drumsSlider;
+@property (nonatomic, strong) UILabel *bassLabel, *bassValue;
+@property (nonatomic, strong) UISlider *bassSlider;
+@property (nonatomic, strong) UILabel *otherLabel, *otherValue;
+@property (nonatomic, strong) UISlider *otherSlider;
+@property (nonatomic, strong) UIButton *resetButton;
+
+@property (nonatomic, assign) BOOL separated;
 @end
 
-@implementation SGRStemsPage {
-    UIView *_navBar;
-    UIButton *_backButton;
-    UILabel *_titleLabel;
-
-    UIView *_initialView;
-    UIButton *_separateButton;
-    UILabel *_hintLabel;
-    UIActivityIndicatorView *_spinner;
-
-    UIView *_slidersView;
-    UILabel *_vocalsLabel, *_vocalsValue;
-    UISlider *_vocalsSlider;
-    UILabel *_drumsLabel, *_drumsValue;
-    UISlider *_drumsSlider;
-    UILabel *_bassLabel, *_bassValue;
-    UISlider *_bassSlider;
-    UILabel *_otherLabel, *_otherValue;
-    UISlider *_otherSlider;
-    UIButton *_resetButton;
-
-    BOOL _separated;
-}
+@implementation SGRStemsPage
 
 - (instancetype)initWithFrame:(CGRect)frame {
     if (!(self = [super initWithFrame:frame])) return nil;
@@ -76,7 +75,7 @@
 
     _hintLabel = [UILabel new];
     _hintLabel.font = [UIFont systemFontOfSize:14];
-    _hintLabel.textColor = SGGrey();
+    _hintLabel.textColor = SGRSecondary();
     _hintLabel.textAlignment = NSTextAlignmentCenter;
     _hintLabel.text = @"Isolate Vocals, Drums, Bass & Other";
     [_initialView addSubview:_hintLabel];
@@ -117,7 +116,7 @@
     _resetButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _resetButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     [_resetButton setTitle:@"Reset Stems" forState:UIControlStateNormal];
-    [_resetButton setTitleColor:SGRed() forState:UIControlStateNormal];
+    [_resetButton setTitleColor:[UIColor systemRedColor] forState:UIControlStateNormal];
     [_resetButton addTarget:self action:@selector(resetTapped) forControlEvents:UIControlEventTouchUpInside];
     [_slidersView addSubview:_resetButton];
 
@@ -145,7 +144,7 @@
 - (UILabel *)makeValueLabel {
     UILabel *l = [UILabel new];
     l.font = [UIFont monospacedDigitSystemFontOfSize:15 weight:UIFontWeightRegular];
-    l.textColor = SGGrey();
+    l.textColor = SGRSecondary();
     l.textAlignment = NSTextAlignmentRight;
     l.text = @"100%";
     return l;
@@ -156,7 +155,7 @@
     s.minimumValue = 0.0f;
     s.maximumValue = 1.0f;
     s.value = 1.0f;
-    s.minimumTrackTintColor = SGGreen();
+    s.minimumTrackTintColor = SGRAccent();
     s.maximumTrackTintColor = [UIColor colorWithWhite:1.0 alpha:0.18];
     [s addTarget:self action:@selector(sliderMoved:) forControlEvents:UIControlEventValueChanged];
     return s;
@@ -195,15 +194,15 @@
     SGSingConfigure(YES);
     SGSingSetEnabled(YES);
 
-    __weak typeof(self) weakSelf = self;
+    __weak SGRStemsPage *weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        typeof(weakSelf) strongSelf = weakSelf;
+        __strong SGRStemsPage *strongSelf = weakSelf;
         if (!strongSelf) return;
-        strongSelf->_separated = YES;
-        [strongSelf->_spinner stopAnimating];
+        strongSelf.separated = YES;
+        [strongSelf.spinner stopAnimating];
         [UIView transitionWithView:strongSelf duration:0.3 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
-            strongSelf->_initialView.hidden = YES;
-            strongSelf->_slidersView.hidden = NO;
+            strongSelf.initialView.hidden = YES;
+            strongSelf.slidersView.hidden = NO;
         } completion:nil];
     });
 }
