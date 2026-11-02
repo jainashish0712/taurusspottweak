@@ -44,3 +44,6 @@ void SG4StemMixerProcess(SG4StemMixer *mixer,
                          const float *other,
                          float *output,
                          uint32_t frames);
+
+void SGSingSet4StemGains(float vocals, float drums, float bass, float other);
+void SGSingGet4StemGains(float *vocals, float *drums, float *bass, float *other);

@@ -167,3 +167,26 @@ void SG4StemMixerProcess(SG4StemMixer *m,
         }
     }
 }
+
+
+static SG4StemMixer sg_globalStemMixer;
+static bool sg_stemMixerInited = false;
+
+void SGSingSet4StemGains(float vocals, float drums, float bass, float other) {
+    if (!sg_stemMixerInited) {
+        SG4StemMixerInit(&sg_globalStemMixer, 44100.0);
+        sg_stemMixerInited = true;
+    }
+    SG4StemMixerSetGains(&sg_globalStemMixer, vocals, drums, bass, other);
+}
+
+void SGSingGet4StemGains(float *vocals, float *drums, float *bass, float *other) {
+    if (!sg_stemMixerInited) {
+        SG4StemMixerInit(&sg_globalStemMixer, 44100.0);
+        sg_stemMixerInited = true;
+    }
+    if (vocals) *vocals = sg_globalStemMixer.targetGainVocals;
+    if (drums) *drums = sg_globalStemMixer.targetGainDrums;
+    if (bass) *bass = sg_globalStemMixer.targetGainBass;
+    if (other) *other = sg_globalStemMixer.targetGainOther;
+}
