@@ -22,7 +22,7 @@ actor SGStemSeparator {
     let windowFrames = SGStemShape.windowFrames
     private let cpu: MLModel
     private var neural: MLModel?         // nil when it could not be loaded; the CPU model then does everything
-    private var neuralFailed = false     // a Neural Engine / GPU prediction failed
+    private var neuralFailed = false     // a Neural Engine prediction failed since Spotify was last inactive
     private var lastAccelerated: Bool?
     private let dsp: SGStemSpectralDSP
     private let tensor: MLMultiArray
@@ -38,34 +38,26 @@ actor SGStemSeparator {
         let shape = SGStemShape.spectrum.map(NSNumber.init(value:))
         let description = cpu.modelDescription
         guard description.stateDescriptionsByName.isEmpty,
-              description.inputDescriptionsByName.count == 1,
+              description.inputDescriptionsByName.count == 1, description.outputDescriptionsByName.count == 1,
               let input = description.inputDescriptionsByName["spectrum"]?.multiArrayConstraint,
-              input.shape == shape,
-              (input.dataType == .float32 || input.dataType == .float16) else { throw SGStemError.invalidModel }
-
+              let output = description.outputDescriptionsByName["vocals_spectrum"]?.multiArrayConstraint,
+              input.shape == shape, output.shape == shape,
+              (input.dataType == .float32 || input.dataType == .float16),
+              (output.dataType == .float32 || output.dataType == .float16) else { throw SGStemError.invalidModel }
+        // The Vitrine Core ML export declares float16 but accepts this float32 input tensor.
         let tensor = try MLMultiArray(shape: shape, dataType: .float32)
         guard tensor.strides.map(\.intValue) == Self.strides else { throw SGStemError.invalidInput }
         self.tensor = tensor
         self.provider = try MLDictionaryFeatureProvider(dictionary: ["spectrum": tensor])
         self.cpu = cpu
         self.dsp = try SGStemSpectralDSP()
-
-        // Configure hardware acceleration: ANE + GPU heterogeneous compute
         let accelerated = MLModelConfiguration()
-        accelerated.computeUnits = .all
-        accelerated.allowLowPrecisionAccumulationOnGPU = true
-        do {
-            self.neural = try await MLModel.load(contentsOf: modelURL, configuration: accelerated)
-        } catch {
+        accelerated.computeUnits = .cpuAndNeuralEngine
+        // Without the Neural Engine copy the CPU model still does the work, only more slowly in the foreground.
+        do { self.neural = try await MLModel.load(contentsOf: modelURL, configuration: accelerated) }
+        catch {
             try Task.checkCancellation()
-            // Fall back to cpuAndNeuralEngine if .all encounters an error
-            let aneOnly = MLModelConfiguration()
-            aneOnly.computeUnits = .cpuAndNeuralEngine
-            do {
-                self.neural = try await MLModel.load(contentsOf: modelURL, configuration: aneOnly)
-            } catch {
-                NSLog("[spotifyglass] Sing ANE/GPU acceleration unavailable: %@", String(describing: error))
-            }
+            NSLog("[spotifyglass] Sing Neural Engine acceleration unavailable: %@", String(describing: error))
         }
     }
 
@@ -76,11 +68,11 @@ actor SGStemSeparator {
 
     func warmUp() async throws {
         try encode([Float](repeating: 0, count: windowFrames * 2))
-        _ = try predictResult(accelerated: false)
-        if neural != nil, await foreground() { _ = try predictResult(accelerated: true) }
+        _ = try predict(accelerated: false)
+        if neural != nil, await foreground() { _ = try predict(accelerated: true) }
     }
 
-    func stems(for pcm: [Float]) async throws -> SG4Stems {
+    func vocals(for pcm: [Float]) async throws -> [Float] {
         guard pcm.count == windowFrames * 2, pcm.allSatisfy(\.isFinite) else { throw SGStemError.invalidInput }
         await acquire()
         defer { release() }
@@ -90,62 +82,10 @@ actor SGStemSeparator {
         try encode(pcm)
         let accelerated = active && !neuralFailed
         if lastAccelerated != accelerated {
-            NSLog("[spotifyglass] Sing Core ML compute policy: %@", accelerated ? "foreground ANE/GPU accelerated" : "CPU only")
+            NSLog("[spotifyglass] Sing Core ML compute policy: %@", accelerated ? "foreground CPU/Neural Engine" : "CPU only")
             lastAccelerated = accelerated
         }
-        let result = try predictResult(accelerated: accelerated)
-        try Task.checkCancellation()
-
-        // 1. Vocals
-        let vocals: [Float]
-        if let vArr = result.featureValue(for: "vocals_spectrum")?.multiArrayValue {
-            vocals = try decodeSpectrum(vArr)
-        } else if let vArr = result.featureValue(for: "vocals")?.multiArrayValue {
-            vocals = try decodeSpectrum(vArr)
-        } else {
-            throw SGStemError.invalidOutput
-        }
-
-        // 2. Drums
-        let drums: [Float]
-        if let dArr = result.featureValue(for: "drums_spectrum")?.multiArrayValue {
-            drums = try decodeSpectrum(dArr)
-        } else if let dArr = result.featureValue(for: "drums")?.multiArrayValue {
-            drums = try decodeSpectrum(dArr)
-        } else {
-            drums = [Float](repeating: 0, count: pcm.count)
-        }
-
-        // 3. Bass
-        let bass: [Float]
-        if let bArr = result.featureValue(for: "bass_spectrum")?.multiArrayValue {
-            bass = try decodeSpectrum(bArr)
-        } else if let bArr = result.featureValue(for: "bass")?.multiArrayValue {
-            bass = try decodeSpectrum(bArr)
-        } else {
-            bass = [Float](repeating: 0, count: pcm.count)
-        }
-
-        // 4. Other
-        let other: [Float]
-        if let oArr = result.featureValue(for: "other_spectrum")?.multiArrayValue {
-            other = try decodeSpectrum(oArr)
-        } else if let oArr = result.featureValue(for: "other")?.multiArrayValue {
-            other = try decodeSpectrum(oArr)
-        } else {
-            // Compute residual: other = original - (vocals + drums + bass)
-            var rem = [Float](repeating: 0, count: pcm.count)
-            for i in 0..<pcm.count {
-                rem[i] = pcm[i] - (vocals[i] + drums[i] + bass[i])
-            }
-            other = rem
-        }
-
-        return SG4Stems(vocals: vocals, drums: drums, bass: bass, other: other)
-    }
-
-    func vocals(for pcm: [Float]) async throws -> [Float] {
-        return try await stems(for: pcm).vocals
+        return try predict(accelerated: accelerated)
     }
 
     private func acquire() async {
@@ -171,7 +111,7 @@ actor SGStemSeparator {
             start: tensor.dataPointer.assumingMemoryBound(to: Float.self), count: tensor.count))
     }
 
-    private func predictResult(accelerated: Bool) throws -> MLFeatureProvider {
+    private func predict(accelerated: Bool) throws -> [Float] {
         try Task.checkCancellation()
         let result: MLFeatureProvider
         if accelerated, let neural {
@@ -179,15 +119,13 @@ actor SGStemSeparator {
             catch {
                 try Task.checkCancellation()
                 neuralFailed = true
-                NSLog("[spotifyglass] Sing using CPU after Neural Engine/GPU prediction failed: %@", String(describing: error))
+                NSLog("[spotifyglass] Sing using CPU after Neural Engine prediction failed: %@", String(describing: error))
                 result = try cpu.prediction(from: provider)
             }
         } else { result = try cpu.prediction(from: provider) }
-        return result
-    }
-
-    private func decodeSpectrum(_ output: MLMultiArray) throws -> [Float] {
-        guard output.shape.map(\.intValue) == SGStemShape.spectrum,
+        try Task.checkCancellation()
+        guard let output = result.featureValue(for: "vocals_spectrum")?.multiArrayValue,
+              output.shape.map(\.intValue) == SGStemShape.spectrum,
               output.dataType == .float32 || output.dataType == .float16 else { throw SGStemError.invalidOutput }
         let strides = output.strides.map(\.intValue)
         var spectrum = [Float](repeating: 0, count: SGStemShape.spectrumCount)
