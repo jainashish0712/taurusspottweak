@@ -14,6 +14,8 @@
 #import "Shared/Player/SpeedPitch.h"
 #import "Shared/AnimatedArtwork/AnimatedArtwork.h"
 #import "Player.h"
+#import "SGRStemsViewController.h"
+#import "Shared/Nagare/SGNagareBridge.h"
 
 static __weak UIView *sg_moreButton;   // the ⋯ the sliders' panel comes from
 
@@ -93,10 +95,20 @@ static UIMenu *lockScreenStyleMenu(void) {
                         children:choices];
 }
 
+static UIAction *stemsMenuItem(void) {
+    return [UIAction actionWithTitle:@"Stem Separation & DSP"
+                               image:symbol(@"waveform.badge.magnifyingglass")
+                          identifier:nil
+                             handler:^(UIAction *action) {
+        [SGRStemsViewController presentFromCurrentPlayer];
+    }];
+}
+
 static NSArray<UIMenuElement *> *playerItems(void) {
     NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
     UIAction *sound = soundMenu();
     if (sound) [items addObject:sound];
+    [items addObject:stemsMenuItem()];
     [items addObject:lockScreenStyleMenu()];
     [items addObject:backgroundStyleMenu()];
     return items;

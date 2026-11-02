@@ -7,6 +7,7 @@ typedef enum {
     SGAudioStageSing,
     SGAudioStageSpeedPitch,
     SGAudioStageEffects,
+    SGAudioStageNagare,
     SGAudioStageHaptics,
     SGAudioStageCount
 } SGAudioStage;

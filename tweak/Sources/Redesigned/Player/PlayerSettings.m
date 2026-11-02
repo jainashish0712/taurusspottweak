@@ -33,6 +33,7 @@
 #import "Shared/LyricsSources/LyricsSources.h"
 #import "Shared/Player/SGLastTrack.h"
 #import "Player.h"
+#import "SGRStemsViewController.h"
 
 // The card's height as a share of its width, kept between the two bounds.
 static const CGFloat kCardAspect = 0.5, kCardMinHeight = 168, kCardMaxHeight = 220;
@@ -596,6 +597,11 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
         SGNotedSection(@"Kawarp", kawarpRows, @"Kawarp domain warping and Kawase blur parameters. Tap the album thumbnail in the player to toggle its visibility."),
         SGNotedSection(@"Background opacity", blur, @"Lower opacity makes each background layer more transparent. "
                     @"Canvas and lyrics sliders reduce blur strength directly; at 0% the blur is fully transparent."),
+        SGNotedSection(@"Stem Separation & DSP", @[
+            SGActionRow(@"Stem Separation & Nagare DSP", @"Open 4-stem mixer, upscaler and real-time DSP suite", ^{
+                [SGRStemsViewController presentFromCurrentPlayer];
+            })
+        ], @"Isolate Vocals, Drums, Bass, and Instruments with real-time HPSS and spectral processing."),
         SGNotedSection(@"Controls", @[
                        SGSwitchRow(@"Allow auto-lock while player is open", @"When off, keep the screen awake while the player is open",
                                    SGRKeyPlayerAllowAutoLock),
