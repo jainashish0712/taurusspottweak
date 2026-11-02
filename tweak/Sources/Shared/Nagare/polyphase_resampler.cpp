@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // Copyright (C) 2026 Raka-Saka
 //
@@ -33,6 +33,16 @@ namespace nagare {
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
+
+template <typename T>
+T gcd(T a, T b) {
+    while (b != 0) {
+        T t = b;
+        b = a % b;
+        a = t;
+    }
+    return (a < 0) ? -a : a;
+}
 
 /// Zeroth-order modified Bessel function of the first kind, for the Kaiser
 /// window. The series converges quickly for the beta range we use.
@@ -80,7 +90,7 @@ bool PolyphaseResampler::init(int in_rate, int out_rate, int channels) {
         return true;
     }
 
-    const int g = std::gcd(in_rate, out_rate);
+    const int g = gcd(in_rate, out_rate);
     L_ = out_rate / g;   // e.g. 48000/300 = 160
     M_ = in_rate / g;    // e.g. 44100/300 = 147
 
