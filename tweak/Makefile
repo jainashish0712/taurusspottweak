@@ -10,8 +10,6 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME := spotifyglass
 
 spotifyglass_FILES := $(shell find Sources -name '*.m' -o -name '*.x' -o -name '*.swift' -o -name '*.cpp' -o -name '*.mm' | sort)
-spotifyglass_CCFLAGS := -std=c++17 -ISources -ISources/Shared/Nagare
-spotifyglass_CXXFLAGS := -std=c++17 -ISources -ISources/Shared/Nagare
 spotifyglass_CFLAGS := -fobjc-arc -ISources -DSG_VERSION=\"$(SG_VERSION)\"
 spotifyglass_FRAMEWORKS := UIKit QuartzCore UniformTypeIdentifiers MediaPlayer CoreImage AudioToolbox AVFoundation CoreHaptics Accelerate Network CoreML CoreMotion CoreText NaturalLanguage Metal
 

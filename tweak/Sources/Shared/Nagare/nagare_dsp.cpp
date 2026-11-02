@@ -41,14 +41,10 @@
 #include <complex>
 #include <memory>
 
-#if __cplusplus < 201703L || !defined(__cpp_lib_clamp)
-namespace std {
 template <typename T>
-static inline constexpr const T& clamp(const T& v, const T& lo, const T& hi) {
+static inline constexpr const T& clamp_val(const T& v, const T& lo, const T& hi) {
     return (v < lo) ? lo : (hi < v) ? hi : v;
 }
-}
-#endif
 
 // A/B comparison switch. 0 = shipping behaviour. Build with
 // -DNAGARE_AB_ORIGINAL=1 to reproduce the pre-audit DSP (crossfeed without
@@ -837,8 +833,8 @@ public:
 
     /// `attack` and `sustain` ∈ [-1, 1]. Positive = enhance, negative = soften.
     void setParams(float attack, float sustain) {
-        attack_amount  = std::clamp(attack,  -1.0f, 1.0f);
-        sustain_amount = std::clamp(sustain, -1.0f, 1.0f);
+        attack_amount  = clamp_val(attack,  -1.0f, 1.0f);
+        sustain_amount = clamp_val(sustain, -1.0f, 1.0f);
     }
 
     void process(float* left, float* right, int n) {
@@ -867,14 +863,14 @@ public:
             // sustain, →1 during a transient. The 1e-9 floor avoids divide-
             // by-zero during silence.
             float attackness = (env_fast - env_slow) / (env_slow + 1e-9f);
-            attackness = std::clamp(attackness, 0.0f, 1.0f);
+            attackness = clamp_val(attackness, 0.0f, 1.0f);
 
             // Crossfade between attack and sustain gain by attackness.
             float attack_gain  = 1.0f + attack_amount  * attackness * 1.5f;
             float sustain_gain = 1.0f + sustain_amount * (1.0f - attackness) * 0.8f;
             float gain = attack_gain * sustain_gain;
             // Clamp gain so we never push into clipping or full mute.
-            gain = std::clamp(gain, 0.25f, 4.0f);
+            gain = clamp_val(gain, 0.25f, 4.0f);
 
             left[i]  *= gain;
             right[i] *= gain;
@@ -1037,9 +1033,9 @@ public:
     // Munson curve, < 1.0 dampens that band (e.g. bass-heavy song doesn't
     // need extra bass), > 1.0 boosts that band (e.g. thin source).
     void recalc(float amount, float low_factor, float high_factor) {
-        amount = std::clamp(amount, 0.0f, 1.0f);
-        low_factor  = std::clamp(low_factor,  0.0f, 1.5f);
-        high_factor = std::clamp(high_factor, 0.0f, 1.5f);
+        amount = clamp_val(amount, 0.0f, 1.0f);
+        low_factor  = clamp_val(low_factor,  0.0f, 1.5f);
+        high_factor = clamp_val(high_factor, 0.0f, 1.5f);
         // Shelf gains and corners fitted to ISO 226:2003.
         //
         // The requirement is the difference between the 60-phon and 80-phon
@@ -1690,8 +1686,8 @@ public:
             float bass_r = bass_lp_r.process(right[i]);
 
             // Clamp bass to valid range for polynomial
-            bass_l = std::clamp(bass_l, -1.0f, 1.0f);
-            bass_r = std::clamp(bass_r, -1.0f, 1.0f);
+            bass_l = clamp_val(bass_l, -1.0f, 1.0f);
+            bass_r = clamp_val(bass_r, -1.0f, 1.0f);
 
             // Generate 2nd harmonic (full-wave rectification) - warmth and punch
             float harm2_l = bass_l * std::abs(bass_l);
@@ -1733,7 +1729,7 @@ public:
                         // Only track if in musical bass range (60-300 Hz)
                         if (detected_freq >= 60.0f && detected_freq <= 300.0f) {
                             // Subharmonic = half the fundamental, clamped to 25-80 Hz
-                            float target_freq = std::clamp(detected_freq * 0.5f, 25.0f, 80.0f);
+                            float target_freq = clamp_val(detected_freq * 0.5f, 25.0f, 80.0f);
                             // Smooth frequency transition to avoid clicks
                             sub_osc_freq += (target_freq - sub_osc_freq) * 0.1f;
                             sub_osc_phase_inc = sub_osc_freq / static_cast<float>(sample_rate);
@@ -2096,8 +2092,8 @@ public:
         if (band < 0 || band >= EQ_BANDS) return;
         // Keep the filter stable: clamp below Nyquist and to a sane Q range.
         const float nyquist = static_cast<float>(sample_rate) * 0.5f;
-        eq_freqs_[band] = std::clamp(freq, 10.0f, nyquist * 0.95f);
-        eq_q_[band] = std::clamp(q, 0.1f, 10.0f);
+        eq_freqs_[band] = clamp_val(freq, 10.0f, nyquist * 0.95f);
+        eq_q_[band] = clamp_val(q, 0.1f, 10.0f);
         eq_gains_[band] = gain_db;
         eq_gains_target_[band] = gain_db;
         eq_type_[band] = static_cast<float>(type);
@@ -2113,7 +2109,7 @@ public:
     /// answer is that the two recordings genuinely are different, not that one
     /// needs fixing.
     void setNormalizationGain(float gain_db) {
-        const float clamped = std::clamp(gain_db, -12.0f, 12.0f);
+        const float clamped = clamp_val(gain_db, -12.0f, 12.0f);
         norm_gain_target_ = std::pow(10.0f, clamped / 20.0f);
     }
 
@@ -2129,7 +2125,7 @@ public:
     /// bump right where a small speaker is already straining, which is the
     /// opposite of the point.
     void setOutputHighPass(float freq_hz) {
-        output_hp_freq_ = std::clamp(freq_hz, 0.0f, 1000.0f);
+        output_hp_freq_ = clamp_val(freq_hz, 0.0f, 1000.0f);
         output_hp_active_ = output_hp_freq_ >= 20.0f;
         if (output_hp_active_) {
             output_hp_l_.setHighPass(output_hp_freq_, 0.707f, sample_rate);
@@ -2144,8 +2140,8 @@ public:
     /// not be "more choice" — it would be a tone control masquerading as
     /// research, and at that depth it undoes the correction it sits on top of.
     void setPreferenceTilt(float bass_db, float treble_db) {
-        preference_bass_db_ = std::clamp(bass_db, -6.0f, 6.0f);
-        preference_treble_db_ = std::clamp(treble_db, -6.0f, 6.0f);
+        preference_bass_db_ = clamp_val(bass_db, -6.0f, 6.0f);
+        preference_treble_db_ = clamp_val(treble_db, -6.0f, 6.0f);
         applyPreferenceTilt();
     }
 
@@ -2224,55 +2220,55 @@ public:
     void setChainBypass(bool enabled) { chain_bypass = enabled; }
 
     void setStereoWidthEnabled(bool enabled) { stereo_width_enabled = enabled; }
-    void setStereoWidth(float width) { stereo_width_target = std::clamp(width, 0.0f, 2.0f); }
+    void setStereoWidth(float width) { stereo_width_target = clamp_val(width, 0.0f, 2.0f); }
 
     void setCrossfeedEnabled(bool enabled) { crossfeed_enabled = enabled; }
-    void setCrossfeed(float amount) { crossfeed_target = std::clamp(amount, 0.0f, 1.0f); }
+    void setCrossfeed(float amount) { crossfeed_target = clamp_val(amount, 0.0f, 1.0f); }
 
     void setVirtualBassEnabled(bool enabled) { virtual_bass_enabled = enabled; }
     void setVirtualBass(float amount, float freq) {
-        virtual_bass_target = std::clamp(amount, 0.0f, 1.0f);
+        virtual_bass_target = clamp_val(amount, 0.0f, 1.0f);
         bass_lp_l.setLowPass(freq, 0.7f, sample_rate);
         bass_lp_r.setLowPass(freq, 0.7f, sample_rate);
     }
 
     // Smooth setter for real-time adaptation (50ms ramp)
     void setVirtualBassSmooth(float amount) {
-        virtual_bass_target = std::clamp(amount, 0.0f, 1.0f);
+        virtual_bass_target = clamp_val(amount, 0.0f, 1.0f);
     }
 
     void setSubharmonicEnabled(bool enabled) { subharmonic_enabled = enabled; }
     void setSubharmonic(float amount) {
-        subharmonic_target = std::clamp(amount, 0.0f, 1.0f);
+        subharmonic_target = clamp_val(amount, 0.0f, 1.0f);
     }
 
     void setTubeWarmthEnabled(bool enabled) { tube_warmth_enabled = enabled; }
     void setTubeWarmth(float amount, float drive) {
-        tube_warmth_target = std::clamp(amount, 0.0f, 1.0f);
-        tube_drive_target = std::clamp(drive, 0.0f, 1.0f);
+        tube_warmth_target = clamp_val(amount, 0.0f, 1.0f);
+        tube_drive_target = clamp_val(drive, 0.0f, 1.0f);
     }
 
     void setExciterEnabled(bool enabled) { exciter_enabled = enabled; }
     void setExciter(float amount, float freq) {
-        exciter_target = std::clamp(amount, 0.0f, 1.0f);
+        exciter_target = clamp_val(amount, 0.0f, 1.0f);
         exciter_hp_l.setHighPass(freq, 0.7f, sample_rate);
         exciter_hp_r.setHighPass(freq, 0.7f, sample_rate);
     }
 
     // Smooth setter for real-time adaptation (50ms ramp)
     void setExciterSmooth(float amount) {
-        exciter_target = std::clamp(amount, 0.0f, 1.0f);
+        exciter_target = clamp_val(amount, 0.0f, 1.0f);
     }
 
     void setAirBandEnabled(bool enabled) { air_band_enabled = enabled; }
     void setAirBand(float amount) {
-        air_band_target = std::clamp(amount, 0.0f, 1.0f);
+        air_band_target = clamp_val(amount, 0.0f, 1.0f);
     }
 
     // V8.3 — loudness compensation setters
     void setLoudnessCompEnabled(bool enabled) { loudness_comp_enabled = enabled; }
     void setLoudnessCompAmount(float amount) {
-        loudness_comp_target = std::clamp(amount, 0.0f, 1.0f);
+        loudness_comp_target = clamp_val(amount, 0.0f, 1.0f);
     }
     bool isLoudnessCompEnabled() const { return loudness_comp_enabled; }
     float getLoudnessCompAmount() const { return loudness_comp_target; }
@@ -2281,8 +2277,8 @@ public:
     // from the SongAudioProfile so the curve respects what's already in the
     // mix. low_factor = 1.0 means nominal +6 dB low shelf; 0.5 halves it.
     void setLoudnessCompBalance(float low_factor, float high_factor) {
-        loudness_comp_low_factor  = std::clamp(low_factor,  0.0f, 1.5f);
-        loudness_comp_high_factor = std::clamp(high_factor, 0.0f, 1.5f);
+        loudness_comp_low_factor  = clamp_val(low_factor,  0.0f, 1.5f);
+        loudness_comp_high_factor = clamp_val(high_factor, 0.0f, 1.5f);
     }
 
     // V8.5 — per-song pre-attenuation (dB, 0 or negative). Combined with the
@@ -2305,8 +2301,8 @@ public:
         }
     }
     void setTransientShaperParams(float attack, float sustain) {
-        transient_attack_target  = std::clamp(attack,  -1.0f, 1.0f);
-        transient_sustain_target = std::clamp(sustain, -1.0f, 1.0f);
+        transient_attack_target  = clamp_val(attack,  -1.0f, 1.0f);
+        transient_sustain_target = clamp_val(sustain, -1.0f, 1.0f);
     }
 
     void setReverbEnabled(bool enabled) {
@@ -2619,7 +2615,7 @@ public:
     void setSmartEnhance(bool enabled, float intensity) {
         // Smart Enhance V3 - Device-aware processing
         // intensity is now just for future use (e.g., "gentle" vs "aggressive" presets)
-        intensity = std::clamp(intensity, 0.0f, 1.0f);
+        intensity = clamp_val(intensity, 0.0f, 1.0f);
 
         if (enabled) {
             // Apply current device profile (set by Kotlin side)
@@ -3155,8 +3151,8 @@ void nagare_get_bands(float* bands, int num_bands) {
         float frac_hi = (std::pow(2.0f, static_cast<float>(b + 1) / num_bands) - 1.0f);
         int bin_lo = static_cast<int>(frac_lo * bins);
         int bin_hi = static_cast<int>(frac_hi * bins);
-        bin_lo = std::clamp(bin_lo, 0, bins - 1);
-        bin_hi = std::clamp(bin_hi, bin_lo + 1, bins);
+        bin_lo = clamp_val(bin_lo, 0, bins - 1);
+        bin_hi = clamp_val(bin_hi, bin_lo + 1, bins);
 
         float sum = 0;
         int count = bin_hi - bin_lo;

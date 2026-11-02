@@ -911,7 +911,7 @@ void SGNagareGetFFTMagnitudes(float *output, int fftSize) {
 }
 
 // Auto-register into SGAudioPipeline upon tweak load
-__attribute__((constructor)) static void SGNagareAutoRegister(void) {
+__attribute__((used, constructor)) static void SGNagareAutoRegister(void) {
     SGNagareInit(44100.0);
     SGAudioPipelineRegister(SGAudioStageNagare, SGNagareGetAudioProcessor());
     SGLog(@"nagare: stage registered with audio pipeline");
