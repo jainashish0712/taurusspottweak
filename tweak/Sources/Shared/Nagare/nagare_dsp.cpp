@@ -1114,7 +1114,7 @@ private:
 
 class DSPEngine {
 public:
-    DSPEngine() : fft(nullptr), reverb(nullptr) {}
+    DSPEngine() : reverb(nullptr), fft(nullptr) {}
 
     void init(int sample_rate, int channels, int buffer_size) {
         this->sample_rate = sample_rate;
