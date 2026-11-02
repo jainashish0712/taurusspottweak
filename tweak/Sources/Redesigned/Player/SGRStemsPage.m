@@ -219,6 +219,10 @@
     [self resetTapped];
 }
 
+- (void)openTapped {
+    [self showPageAnimated:YES];
+}
+
 - (void)backTapped {
     [self hidePageAnimated:YES];
 }
@@ -238,9 +242,11 @@
     if (animated) {
         [UIView animateWithDuration:0.28 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
             self.frame = endFrame;
+            self.triggerButton.alpha = 0.0f;
         } completion:nil];
     } else {
         self.frame = endFrame;
+        self.triggerButton.alpha = 0.0f;
     }
 }
 
@@ -251,10 +257,38 @@
     if (animated) {
         [UIView animateWithDuration:0.28 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
             self.frame = endFrame;
+            self.triggerButton.alpha = 1.0f;
         } completion:nil];
     } else {
         self.frame = endFrame;
+        self.triggerButton.alpha = 1.0f;
     }
+}
+
+- (void)handleEdgePan:(UIScreenEdgePanGestureRecognizer *)pan {
+    UIView *superview = self.superview;
+    if (!superview) return;
+    CGFloat w = superview.bounds.size.width;
+    CGPoint translation = [pan translationInView:superview];
+    CGPoint velocity = [pan velocityInView:superview];
+
+    if (pan.state == UIGestureRecognizerStateBegan || pan.state == UIGestureRecognizerStateChanged) {
+        CGFloat x = w + translation.x;
+        if (x < 0) x = 0;
+        if (x > w) x = w;
+        self.frame = CGRectMake(x, 0, w, superview.bounds.size.height);
+        self.triggerButton.alpha = x / w;
+    } else if (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled) {
+        if (translation.x < -60 || velocity.x < -300) {
+            [self showPageAnimated:YES];
+        } else {
+            [self hidePageAnimated:YES];
+        }
+    }
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    return YES;
 }
 
 - (void)layoutSubviews {
