@@ -2,23 +2,55 @@ import Foundation
 
 enum SGStemWindowError: Error { case invalidWindow, outOfOrder, stale, busy }
 
-struct SGStemWindowResult: Sendable {
-    let generation: UInt64, track: UInt64, sourceFrame: UInt64
-    let format: UInt32
-    let vocals: [Float] // one hop of stereo interleaved PCM
+public struct SG4Stems: Sendable {
+    public let vocals: [Float]
+    public let drums: [Float]
+    public let bass: [Float]
+    public let other: [Float]
+
+    public init(vocals: [Float], drums: [Float], bass: [Float], other: [Float]) {
+        self.vocals = vocals
+        self.drums = drums
+        self.bass = bass
+        self.other = other
+    }
+}
+
+public struct SGStemWindowResult: Sendable {
+    public let generation: UInt64, track: UInt64, sourceFrame: UInt64
+    public let format: UInt32
+    public let vocals: [Float] // one hop of stereo interleaved PCM
+    public let drums: [Float]
+    public let bass: [Float]
+    public let other: [Float]
+
+    public init(generation: UInt64, track: UInt64, sourceFrame: UInt64, format: UInt32,
+                vocals: [Float], drums: [Float], bass: [Float], other: [Float]) {
+        self.generation = generation
+        self.track = track
+        self.sourceFrame = sourceFrame
+        self.format = format
+        self.vocals = vocals
+        self.drums = drums
+        self.bass = bass
+        self.other = other
+    }
 }
 
 actor SGStemWindowProcessor {
     let chunkSamples: Int
     let hopSamples: Int
-    private let infer: @Sendable ([Float]) async throws -> [Float]
+    private let infer: @Sendable ([Float]) async throws -> SG4Stems
     private var generation: UInt64 = 0, track: UInt64 = 0, epoch: UInt64 = 0
     private var format: UInt32 = 0
     private var expectedFrame: UInt64?
-    private var tail: [Float]?
+    private var tailVocals: [Float]?
+    private var tailDrums: [Float]?
+    private var tailBass: [Float]?
+    private var tailOther: [Float]?
     private var pending = false
 
-    init(chunkSamples: Int, hopSamples: Int? = nil, infer: @escaping @Sendable ([Float]) async throws -> [Float]) throws {
+    init(chunkSamples: Int, hopSamples: Int? = nil, infer: @escaping @Sendable ([Float]) async throws -> SG4Stems) throws {
         guard chunkSamples >= 2, chunkSamples <= 352800, chunkSamples % 2 == 0 else { throw SGStemWindowError.invalidWindow }
         let hop = hopSamples ?? chunkSamples / 2
         guard hop >= chunkSamples / 2, hop <= chunkSamples * 3 / 4 else { throw SGStemWindowError.invalidWindow }
@@ -30,8 +62,27 @@ actor SGStemWindowProcessor {
     func reset(generation: UInt64, track: UInt64, format: UInt32) {
         epoch &+= 1
         self.generation = generation; self.track = track; self.format = format
-        expectedFrame = nil; tail = nil
+        expectedFrame = nil
+        tailVocals = nil
+        tailDrums = nil
+        tailBass = nil
+        tailOther = nil
         // An old in-flight inference still owns the model until it completes. Its result expires.
+    }
+
+    private static func crossfade(stem: [Float], tail: [Float]?, hop: Int, overlap: Int) -> (output: [Float], newTail: [Float]) {
+        var output = Array(stem.prefix(hop * 2))
+        if let tail {
+            for i in 0..<overlap {
+                let headWeight = Float(i + 1) / Float(overlap + 1)
+                for c in 0..<2 {
+                    let at = i * 2 + c
+                    output[at] = tail[at] * (1 - headWeight) + output[at] * headWeight
+                }
+            }
+        }
+        let newTail = Array(stem.suffix(overlap * 2))
+        return (output, newTail)
     }
 
     func process(_ pcm: [Float], sourceFrame: UInt64, generation: UInt64, track: UInt64, format: UInt32) async throws -> SGStemWindowResult {
@@ -43,22 +94,26 @@ actor SGStemWindowProcessor {
         let ticket = epoch
         pending = true
         defer { pending = false }
-        let vocals = try await infer(pcm)
+        let stems = try await infer(pcm)
         try Task.checkCancellation()
         guard ticket == epoch else { throw SGStemWindowError.stale }
-        guard vocals.count == pcm.count, vocals.allSatisfy(\.isFinite) else { throw SGStemWindowError.invalidWindow }
-        var output = Array(vocals.prefix(hop * 2))
-        if let tail {
-            for i in 0..<overlap {
-                let headWeight = Float(i + 1) / Float(overlap + 1)
-                for c in 0..<2 {
-                    let at = i * 2 + c
-                    output[at] = tail[at] * (1 - headWeight) + output[at] * headWeight
-                }
-            }
-        }
-        tail = Array(vocals.suffix(overlap * 2))
+        guard stems.vocals.count == pcm.count, stems.vocals.allSatisfy(\.isFinite),
+              stems.drums.count == pcm.count, stems.drums.allSatisfy(\.isFinite),
+              stems.bass.count == pcm.count, stems.bass.allSatisfy(\.isFinite),
+              stems.other.count == pcm.count, stems.other.allSatisfy(\.isFinite) else { throw SGStemWindowError.invalidWindow }
+
+        let (outV, newTailV) = Self.crossfade(stem: stems.vocals, tail: tailVocals, hop: hop, overlap: overlap)
+        let (outD, newTailD) = Self.crossfade(stem: stems.drums, tail: tailDrums, hop: hop, overlap: overlap)
+        let (outB, newTailB) = Self.crossfade(stem: stems.bass, tail: tailBass, hop: hop, overlap: overlap)
+        let (outO, newTailO) = Self.crossfade(stem: stems.other, tail: tailOther, hop: hop, overlap: overlap)
+
+        tailVocals = newTailV
+        tailDrums = newTailD
+        tailBass = newTailB
+        tailOther = newTailO
+
         expectedFrame = sourceFrame + UInt64(hop)
-        return SGStemWindowResult(generation: generation, track: track, sourceFrame: sourceFrame, format: format, vocals: output)
+        return SGStemWindowResult(generation: generation, track: track, sourceFrame: sourceFrame, format: format,
+                                  vocals: outV, drums: outD, bass: outB, other: outO)
     }
 }

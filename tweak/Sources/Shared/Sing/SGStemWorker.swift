@@ -2,6 +2,7 @@ import Foundation
 
 public typealias StemRead = @convention(c) (UnsafeMutableRawPointer?, UnsafeMutablePointer<Float>?, UnsafeMutablePointer<UInt64>?) -> Int32
 public typealias StemWrite = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<Float>?, UInt32, UInt64, UInt64, UInt64, UInt32) -> Int32
+public typealias Stem4Write = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<Float>?, UnsafePointer<Float>?, UnsafePointer<Float>?, UnsafePointer<Float>?, UInt32, UInt64, UInt64, UInt64, UInt32) -> Int32
 public typealias StemStatus = @convention(c) (UnsafeMutableRawPointer?, Int32) -> Void
 
 // SGStemWorker.h's SGStemLoading...SGStemFailed, and the stream's packet size (SGSingStreamPacketFrames).
@@ -66,13 +67,16 @@ private actor SGStemModels {
 @available(iOS 18.0, macOS 27.0, *)
 private final class SGStemJob: @unchecked Sendable {
     let context: UnsafeMutableRawPointer?
-    let read: StemRead, write: StemWrite, status: StemStatus
+    let read: StemRead
+    let write: StemWrite?
+    let write4: Stem4Write?
+    let status: StemStatus
     private let lock = NSLock() // cancellation/control only, never an audio callback
     private var unload = false
     var task: Task<Void, Never>?
 
-    init(context: UnsafeMutableRawPointer?, read: @escaping StemRead, write: @escaping StemWrite, status: @escaping StemStatus) {
-        self.context = context; self.read = read; self.write = write; self.status = status
+    init(context: UnsafeMutableRawPointer?, read: @escaping StemRead, write: StemWrite?, write4: Stem4Write?, status: @escaping StemStatus) {
+        self.context = context; self.read = read; self.write = write; self.write4 = write4; self.status = status
     }
     func cancel(unload: Bool) {
         lock.lock(); self.unload = self.unload || unload; lock.unlock()
@@ -92,7 +96,7 @@ private final class SGStemJob: @unchecked Sendable {
             try Task.checkCancellation()
             guard separator.windowFrames == size else { throw SGStemError.invalidModel }
             let worker = try SGStemWindowProcessor(chunkSamples: size, hopSamples: hop) { pcm in
-                try await separator.vocals(for: pcm)
+                try await separator.stems(for: pcm)
             }
             report(.ready)
             let overlap = size - hop
@@ -132,9 +136,27 @@ private final class SGStemJob: @unchecked Sendable {
                     }
                     windows += 1
                     try Task.checkCancellation()
-                    let accepted = result.vocals.withUnsafeBufferPointer {
-                        write(context, $0.baseAddress, UInt32(hop), result.generation, result.track, result.sourceFrame, result.format)
+
+                    let accepted: Int32
+                    if let write4 = self.write4 {
+                        accepted = result.vocals.withUnsafeBufferPointer { vBuf in
+                            result.drums.withUnsafeBufferPointer { dBuf in
+                                result.bass.withUnsafeBufferPointer { bBuf in
+                                    result.other.withUnsafeBufferPointer { oBuf in
+                                        write4(self.context, vBuf.baseAddress, dBuf.baseAddress, bBuf.baseAddress, oBuf.baseAddress,
+                                               UInt32(hop), result.generation, result.track, result.sourceFrame, result.format)
+                                    }
+                                }
+                            }
+                        }
+                    } else if let write = self.write {
+                        accepted = result.vocals.withUnsafeBufferPointer {
+                            write(self.context, $0.baseAddress, UInt32(hop), result.generation, result.track, result.sourceFrame, result.format)
+                        }
+                    } else {
+                        accepted = 0
                     }
+
                     if accepted == 0 { break } // disabling during inference is an expected retirement
                     guard accepted > 0 else { throw SGStemError.invalidOutput }
                     for n in 0..<overlap * 2 { window[n] = window[hop * 2 + n] }
@@ -150,7 +172,6 @@ private final class SGStemJob: @unchecked Sendable {
             }
         }
         let seconds = retention()
-        // Schedule retention independently: this task must release the stream/context now.
         Task { await SGStemModels.shared.release(after: seconds) }
         report(.finished)
     }
@@ -160,7 +181,21 @@ private final class SGStemJob: @unchecked Sendable {
 public func sgStemWorkerStart(_ context: UnsafeMutableRawPointer?, _ path: UnsafePointer<CChar>?, _ windowFrames: UInt32,
                               _ hopFrames: UInt32, _ read: StemRead?, _ write: StemWrite?, _ status: StemStatus?) -> UnsafeMutableRawPointer? {
     if #available(iOS 18.0, macOS 27.0, *), let path, let read, let write, let status {
-        let job = SGStemJob(context: context, read: read, write: write, status: status)
+        let job = SGStemJob(context: context, read: read, write: write, write4: nil, status: status)
+        let modelPath = String(cString: path)
+        job.task = Task.detached(priority: .userInitiated) {
+            await job.run(path: modelPath, window: Int(windowFrames), hop: Int(hopFrames))
+        }
+        return Unmanaged.passRetained(job).toOpaque()
+    }
+    return nil
+}
+
+@_cdecl("SGStem4WorkerStart")
+public func sgStem4WorkerStart(_ context: UnsafeMutableRawPointer?, _ path: UnsafePointer<CChar>?, _ windowFrames: UInt32,
+                               _ hopFrames: UInt32, _ read: StemRead?, _ write4: Stem4Write?, _ status: StemStatus?) -> UnsafeMutableRawPointer? {
+    if #available(iOS 18.0, macOS 27.0, *), let path, let read, let write4, let status {
+        let job = SGStemJob(context: context, read: read, write: nil, write4: write4, status: status)
         let modelPath = String(cString: path)
         job.task = Task.detached(priority: .userInitiated) {
             await job.run(path: modelPath, window: Int(windowFrames), hop: Int(hopFrames))

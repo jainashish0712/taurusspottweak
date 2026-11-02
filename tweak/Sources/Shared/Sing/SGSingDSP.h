@@ -23,3 +23,24 @@ void SGSingMixerSetSpatial(SGSingMixer *mixer, bool on, float distance, float ro
 void SGSingMixerProcess(SGSingMixer *mixer, const float *original, const float *vocals, float *output, uint32_t frames);
 // A 120 ms ramp to the aligned original, no clock change: SGSingReserveFrames at 44.1 kHz.
 void SGSingMixerBypass(SGSingMixer *mixer);
+
+typedef struct {
+    float gainVocals, targetGainVocals;
+    float gainDrums, targetGainDrums;
+    float gainBass, targetGainBass;
+    float gainOther, targetGainOther;
+    float stepVocals, stepDrums, stepBass, stepOther;
+    uint32_t remaining;
+    double sampleRate;
+} SG4StemMixer;
+
+void SG4StemMixerInit(SG4StemMixer *mixer, double sampleRate);
+void SG4StemMixerSetGains(SG4StemMixer *mixer, float vocals, float drums, float bass, float other);
+void SG4StemMixerProcess(SG4StemMixer *mixer,
+                         const float *original,
+                         const float *vocals,
+                         const float *drums,
+                         const float *bass,
+                         const float *other,
+                         float *output,
+                         uint32_t frames);
