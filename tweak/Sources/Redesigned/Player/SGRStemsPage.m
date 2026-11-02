@@ -170,7 +170,7 @@
     else if (slider == _otherSlider) lbl = _otherValue;
     lbl.text = [NSString stringWithFormat:@"%.0f%%", val * 100];
 
-    SGSingSet4StemGains(_vocalsSlider.value, _drumsSlider.value, _bassSlider.value, _otherSlider.value);
+    // SGSingSet4StemGains(_vocalsSlider.value, _drumsSlider.value, _bassSlider.value, _otherSlider.value);
 }
 
 - (void)resetTapped {
@@ -182,7 +182,7 @@
     _drumsValue.text = @"100%";
     _bassValue.text = @"100%";
     _otherValue.text = @"100%";
-    SGSingSet4StemGains(1.0f, 1.0f, 1.0f, 1.0f);
+    // SGSingSet4StemGains(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
 - (void)separateTapped {
