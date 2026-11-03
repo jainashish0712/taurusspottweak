@@ -124,9 +124,9 @@ static const CGFloat kPadding = 18.0;
 
 - (void)startMeterTimer {
     [self stopMeterTimer];
-    __weak typeof(self) weakSelf = self;
+    __weak __typeof__(self) weakSelf = self;
     self.meterTimer = [NSTimer scheduledTimerWithTimeInterval:0.04 repeats:YES block:^(NSTimer * _Nonnull timer) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
+        __strong __typeof__(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         [strongSelf updateMeters];
     }];
@@ -162,61 +162,120 @@ static const CGFloat kPadding = 18.0;
     self.otherMeter.progress = fminf(1.0f, o * otherMult * 4.0f);
 }
 
+#pragma mark - Helper Functions
+
+static int NagareModeFromSegmentIndex(NSInteger segment) {
+    switch (segment) {
+        case 1: return 1; // Karaoke (SEPARATOR_MODE_KARAOKE)
+        case 2: return 2; // Vocals Only (SEPARATOR_MODE_VOCALS_ONLY)
+        case 3: return 4; // Drums Emphasis (SEPARATOR_MODE_DRUMS_EMPHASIS)
+        case 4: return 3; // Bass Boost (SEPARATOR_MODE_BASS_BOOST)
+        case 5: return 5; // Backing / Instrumental (SEPARATOR_MODE_INSTRUMENTAL)
+        default: return 6; // Custom (SEPARATOR_MODE_CUSTOM)
+    }
+}
+
+static NSInteger SegmentIndexFromNagareMode(int mode) {
+    switch (mode) {
+        case 1: return 1; // Karaoke
+        case 2: return 2; // Vocals
+        case 4: return 3; // Drums
+        case 3: return 4; // Bass
+        case 5: return 5; // Backing
+        default: return 0; // Custom (mode 6 or fallback)
+    }
+}
+
 #pragma mark - Header & Layout
 
 - (void)setupHeader {
-    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 70)];
-    header.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    UIView *header = [[UIView alloc] init];
+    header.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.blurView.contentView addSubview:header];
 
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(kPadding, 16, self.view.bounds.size.width - 2 * kPadding - 44, 24)];
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.text = @"Stem Separation & DSP";
     titleLabel.font = [UIFont systemFontOfSize:19 weight:UIFontWeightBold];
     titleLabel.textColor = SGRPrimary();
     [header addSubview:titleLabel];
 
-    UILabel *subtitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(kPadding, 40, self.view.bounds.size.width - 2 * kPadding - 44, 18)];
+    UILabel *subtitleLabel = [[UILabel alloc] init];
+    subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     subtitleLabel.text = @"Real-Time Nagare SIMD Audio Engine";
     subtitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
     subtitleLabel.textColor = SGRSecondary();
     [header addSubview:subtitleLabel];
 
     UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(self.view.bounds.size.width - kPadding - 32, 20, 32, 32);
-    closeBtn.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    closeBtn.translatesAutoresizingMaskIntoConstraints = NO;
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:24 weight:UIImageSymbolWeightMedium];
     [closeBtn setImage:[UIImage systemImageNamed:@"xmark.circle.fill" withConfiguration:config] forState:UIControlStateNormal];
     closeBtn.tintColor = SGRTertiary();
     [closeBtn addTarget:self action:@selector(dismissSelf) forControlEvents:UIControlEventTouchUpInside];
     [header addSubview:closeBtn];
 
-    [self.blurView.contentView addSubview:header];
-
     // Segmented tab picker
     self.tabPicker = [[UISegmentedControl alloc] initWithItems:@[@"4 Stems", @"Subsystems", @"Core Chain"]];
-    self.tabPicker.frame = CGRectMake(kPadding, 74, self.view.bounds.size.width - 2 * kPadding, 32);
-    self.tabPicker.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    self.tabPicker.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabPicker.selectedSegmentIndex = 0;
     self.tabPicker.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     [self.tabPicker addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
     [self.blurView.contentView addSubview:self.tabPicker];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [header.topAnchor constraintEqualToAnchor:self.blurView.contentView.safeAreaLayoutGuide.topAnchor constant:12],
+        [header.leadingAnchor constraintEqualToAnchor:self.blurView.contentView.leadingAnchor constant:kPadding],
+        [header.trailingAnchor constraintEqualToAnchor:self.blurView.contentView.trailingAnchor constant:-kPadding],
+        [header.heightAnchor constraintEqualToConstant:46],
+
+        [titleLabel.topAnchor constraintEqualToAnchor:header.topAnchor],
+        [titleLabel.leadingAnchor constraintEqualToAnchor:header.leadingAnchor],
+        [titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:closeBtn.leadingAnchor constant:-8],
+
+        [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:2],
+        [subtitleLabel.leadingAnchor constraintEqualToAnchor:header.leadingAnchor],
+        [subtitleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:closeBtn.leadingAnchor constant:-8],
+
+        [closeBtn.topAnchor constraintEqualToAnchor:header.topAnchor],
+        [closeBtn.trailingAnchor constraintEqualToAnchor:header.trailingAnchor],
+        [closeBtn.widthAnchor constraintEqualToConstant:32],
+        [closeBtn.heightAnchor constraintEqualToConstant:32],
+
+        [self.tabPicker.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:12],
+        [self.tabPicker.leadingAnchor constraintEqualToAnchor:self.blurView.contentView.leadingAnchor constant:kPadding],
+        [self.tabPicker.trailingAnchor constraintEqualToAnchor:self.blurView.contentView.trailingAnchor constant:-kPadding],
+        [self.tabPicker.heightAnchor constraintEqualToConstant:32],
+    ]];
 }
 
 - (void)setupScrollView {
-    CGFloat topOffset = 114.0;
-    CGRect scrollFrame = CGRectMake(0, topOffset, self.view.bounds.size.width, self.view.bounds.size.height - topOffset);
-    self.scrollView = [[UIScrollView alloc] initWithFrame:scrollFrame];
-    self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.scrollView = [[UIScrollView alloc] init];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.showsVerticalScrollIndicator = YES;
     self.scrollView.alwaysBounceVertical = YES;
     [self.blurView.contentView addSubview:self.scrollView];
 
-    self.contentStack = [[UIStackView alloc] initWithFrame:CGRectMake(0, 0, self.scrollView.bounds.size.width, 0)];
-    self.contentStack.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    self.contentStack = [[UIStackView alloc] init];
+    self.contentStack.translatesAutoresizingMaskIntoConstraints = NO;
     self.contentStack.axis = UILayoutConstraintAxisVertical;
     self.contentStack.spacing = 16.0;
-    self.contentStack.layoutMargins = UIEdgeInsetsMake(12, kPadding, 40, kPadding);
+    self.contentStack.layoutMargins = UIEdgeInsetsMake(12, kPadding, 48, kPadding);
     self.contentStack.layoutMarginsRelativeArrangement = YES;
     [self.scrollView addSubview:self.contentStack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.scrollView.topAnchor constraintEqualToAnchor:self.tabPicker.bottomAnchor constant:10],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.blurView.contentView.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.blurView.contentView.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.blurView.contentView.bottomAnchor],
+
+        [self.contentStack.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
+        [self.contentStack.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
+        [self.contentStack.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
+        [self.contentStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor],
+        [self.contentStack.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
+    ]];
 }
 
 - (void)setupTabs {
@@ -224,21 +283,29 @@ static const CGFloat kPadding = 18.0;
     [self setupSubsystemsTab];
     [self setupCoreChainTab];
 
-    [self.contentStack addArrangedSubview:self.stemsTab];
-    [self.contentStack addArrangedSubview:self.subsystemsTab];
-    [self.contentStack addArrangedSubview:self.coreChainTab];
+    [self showTabAtIndex:0];
+}
 
-    self.subsystemsTab.hidden = YES;
-    self.coreChainTab.hidden = YES;
+- (void)showTabAtIndex:(NSInteger)index {
+    for (UIView *subview in self.contentStack.arrangedSubviews) {
+        [self.contentStack removeArrangedSubview:subview];
+        [subview removeFromSuperview];
+    }
+    UIView *target = nil;
+    if (index == 0) target = self.stemsTab;
+    else if (index == 1) target = self.subsystemsTab;
+    else if (index == 2) target = self.coreChainTab;
+    if (target) {
+        target.hidden = NO;
+        [self.contentStack addArrangedSubview:target];
+    }
+    [self.view layoutIfNeeded];
+    [self.scrollView setContentOffset:CGPointZero animated:NO];
 }
 
 - (void)tabChanged:(UISegmentedControl *)sender {
-    self.stemsTab.hidden = (sender.selectedSegmentIndex != 0);
-    self.subsystemsTab.hidden = (sender.selectedSegmentIndex != 1);
-    self.coreChainTab.hidden = (sender.selectedSegmentIndex != 2);
-
     [UIView transitionWithView:self.scrollView duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
-        [self.scrollView layoutIfNeeded];
+        [self showTabAtIndex:sender.selectedSegmentIndex];
     } completion:nil];
 }
 
@@ -250,37 +317,52 @@ static const CGFloat kPadding = 18.0;
 
 - (void)setupStemsTab {
     UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 14.0;
     self.stemsTab = stack;
 
     // Master Switch Card
     UIView *card = [self createCardView];
+    [card.heightAnchor constraintEqualToConstant:72].active = YES;
+
     UILabel *switchLabel = [self createTitleLabel:@"Separate Audio Stems" subtitle:@"Real-time HPSS & Mid/Side separation"];
+    switchLabel.translatesAutoresizingMaskIntoConstraints = NO;
+
     self.stemsMasterSwitch = [[UISwitch alloc] init];
+    self.stemsMasterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     self.stemsMasterSwitch.onTintColor = SGRAccent();
     [self.stemsMasterSwitch addTarget:self action:@selector(stemsMasterToggled:) forControlEvents:UIControlEventValueChanged];
 
     UIStackView *cardRow = [[UIStackView alloc] initWithArrangedSubviews:@[switchLabel, self.stemsMasterSwitch]];
+    cardRow.translatesAutoresizingMaskIntoConstraints = NO;
     cardRow.alignment = UIStackViewAlignmentCenter;
     cardRow.distribution = UIStackViewDistributionEqualSpacing;
     [card addSubview:cardRow];
-    cardRow.frame = CGRectMake(16, 12, self.view.bounds.size.width - 2 * kPadding - 32, 48);
-    cardRow.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [cardRow.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [cardRow.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [cardRow.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
+    ]];
     [stack addArrangedSubview:card];
 
     // Presets Mode Picker
     UILabel *modesHeader = [self createSectionHeader:@"Separation Mode"];
+    modesHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [stack addArrangedSubview:modesHeader];
 
     self.modePicker = [[UISegmentedControl alloc] initWithItems:@[@"Custom", @"Karaoke", @"Vocals", @"Drums", @"Bass", @"Backing"]];
+    self.modePicker.translatesAutoresizingMaskIntoConstraints = NO;
     self.modePicker.selectedSegmentIndex = 0;
     self.modePicker.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     [self.modePicker addTarget:self action:@selector(modePicked:) forControlEvents:UIControlEventValueChanged];
+    [self.modePicker.heightAnchor constraintEqualToConstant:32].active = YES;
     [stack addArrangedSubview:self.modePicker];
 
     // 4 Sliders (Vocals, Drums, Bass, Other)
     UILabel *slidersHeader = [self createSectionHeader:@"Stem Balance"];
+    slidersHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [stack addArrangedSubview:slidersHeader];
 
     UIView *vocalsCard = [self createStemSliderRow:@"Vocals"
@@ -321,13 +403,13 @@ static const CGFloat kPadding = 18.0;
 
     // Reset button
     UIButton *resetBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    resetBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [resetBtn setTitle:@"Reset Stems to 100%" forState:UIControlStateNormal];
     resetBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
     [resetBtn setTitleColor:SGRAccent() forState:UIControlStateNormal];
     resetBtn.backgroundColor = SGRSolidGlassFill();
     resetBtn.layer.cornerRadius = 14;
     resetBtn.clipsToBounds = YES;
-    resetBtn.frame = CGRectMake(0, 0, 0, 44);
     [resetBtn.heightAnchor constraintEqualToConstant:44].active = YES;
     [resetBtn addTarget:self action:@selector(resetStemsTapped) forControlEvents:UIControlEventTouchUpInside];
     [stack addArrangedSubview:resetBtn];
@@ -341,23 +423,24 @@ static const CGFloat kPadding = 18.0;
                           meter:(UIProgressView * __strong *)outMeter
                          action:(SEL)action {
     UIView *card = [self createCardView];
-    card.frame = CGRectMake(0, 0, 0, 84);
-    [card.heightAnchor constraintEqualToConstant:84].active = YES;
+    [card.heightAnchor constraintEqualToConstant:90].active = YES;
 
-    UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(16, 14, 24, 24)];
+    UIImageView *iconView = [[UIImageView alloc] init];
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
     iconView.image = [UIImage systemImageNamed:symbol];
     iconView.tintColor = color;
     iconView.contentMode = UIViewContentModeScaleAspectFit;
     [card addSubview:iconView];
 
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(48, 14, 180, 24)];
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.text = title;
     titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     titleLabel.textColor = SGRPrimary();
     [card addSubview:titleLabel];
 
-    UILabel *valLabel = [[UILabel alloc] initWithFrame:CGRectMake(card.bounds.size.width - 70, 14, 54, 24)];
-    valLabel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    UILabel *valLabel = [[UILabel alloc] init];
+    valLabel.translatesAutoresizingMaskIntoConstraints = NO;
     valLabel.text = @"100%";
     valLabel.font = [UIFont monospacedDigitSystemFontOfSize:14 weight:UIFontWeightMedium];
     valLabel.textAlignment = NSTextAlignmentRight;
@@ -365,8 +448,8 @@ static const CGFloat kPadding = 18.0;
     [card addSubview:valLabel];
     if (outLabel) *outLabel = valLabel;
 
-    UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(16, 44, card.bounds.size.width - 32, 28)];
-    slider.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    UISlider *slider = [[UISlider alloc] init];
+    slider.translatesAutoresizingMaskIntoConstraints = NO;
     slider.minimumValue = 0.0f;
     slider.maximumValue = 2.0f;
     slider.value = 1.0f;
@@ -376,13 +459,36 @@ static const CGFloat kPadding = 18.0;
     if (outSlider) *outSlider = slider;
 
     UIProgressView *meter = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
-    meter.frame = CGRectMake(16, 76, card.bounds.size.width - 32, 3);
-    meter.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    meter.translatesAutoresizingMaskIntoConstraints = NO;
     meter.progressTintColor = [color colorWithAlphaComponent:0.7];
     meter.trackTintColor = [UIColor clearColor];
     meter.progress = 0.0f;
     [card addSubview:meter];
     if (outMeter) *outMeter = meter;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [iconView.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [iconView.topAnchor constraintEqualToAnchor:card.topAnchor constant:14],
+        [iconView.widthAnchor constraintEqualToConstant:22],
+        [iconView.heightAnchor constraintEqualToConstant:22],
+
+        [titleLabel.leadingAnchor constraintEqualToAnchor:iconView.trailingAnchor constant:10],
+        [titleLabel.centerYAnchor constraintEqualToAnchor:iconView.centerYAnchor],
+
+        [valLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [valLabel.centerYAnchor constraintEqualToAnchor:iconView.centerYAnchor],
+        [valLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:titleLabel.trailingAnchor constant:8],
+
+        [slider.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [slider.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [slider.topAnchor constraintEqualToAnchor:iconView.bottomAnchor constant:8],
+        [slider.heightAnchor constraintEqualToConstant:28],
+
+        [meter.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [meter.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [meter.topAnchor constraintEqualToAnchor:slider.bottomAnchor constant:4],
+        [meter.heightAnchor constraintEqualToConstant:3],
+    ]];
 
     return card;
 }
@@ -391,31 +497,35 @@ static const CGFloat kPadding = 18.0;
 
 - (void)setupSubsystemsTab {
     UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 16.0;
     self.subsystemsTab = stack;
 
     // 1. Audio Upscaler (SBR / DSEE)
     UILabel *upHeader = [self createSectionHeader:@"Audio Upscaler (SBR / DSEE)"];
+    upHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [stack addArrangedSubview:upHeader];
 
     UIView *upCard = [self createCardView];
-    upCard.frame = CGRectMake(0, 0, 0, 120);
-    [upCard.heightAnchor constraintEqualToConstant:120].active = YES;
+    [upCard.heightAnchor constraintEqualToConstant:128].active = YES;
 
     UILabel *upTitle = [self createTitleLabel:@"Spectral Band Replication" subtitle:@"Reconstructs high frequencies lost to MP3/AAC"];
+    upTitle.translatesAutoresizingMaskIntoConstraints = NO;
+
     self.upscalerSwitch = [[UISwitch alloc] init];
+    self.upscalerSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     self.upscalerSwitch.onTintColor = SGRAccent();
     [self.upscalerSwitch addTarget:self action:@selector(upscalerToggled:) forControlEvents:UIControlEventValueChanged];
 
     UIStackView *upRow = [[UIStackView alloc] initWithArrangedSubviews:@[upTitle, self.upscalerSwitch]];
-    upRow.frame = CGRectMake(16, 12, self.view.bounds.size.width - 2 * kPadding - 32, 44);
-    upRow.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    upRow.translatesAutoresizingMaskIntoConstraints = NO;
+    upRow.alignment = UIStackViewAlignmentCenter;
     upRow.distribution = UIStackViewDistributionEqualSpacing;
     [upCard addSubview:upRow];
 
-    self.upscalerSlider = [[UISlider alloc] initWithFrame:CGRectMake(16, 62, upCard.bounds.size.width - 32, 28)];
-    self.upscalerSlider.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    self.upscalerSlider = [[UISlider alloc] init];
+    self.upscalerSlider.translatesAutoresizingMaskIntoConstraints = NO;
     self.upscalerSlider.minimumValue = 0.0f;
     self.upscalerSlider.maximumValue = 1.0f;
     self.upscalerSlider.value = SGNagareGetUpscalerIntensity();
@@ -423,36 +533,53 @@ static const CGFloat kPadding = 18.0;
     [self.upscalerSlider addTarget:self action:@selector(upscalerSliderMoved:) forControlEvents:UIControlEventValueChanged];
     [upCard addSubview:self.upscalerSlider];
 
-    self.upscalerQualityLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 94, upCard.bounds.size.width - 32, 18)];
-    self.upscalerQualityLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    self.upscalerQualityLabel = [[UILabel alloc] init];
+    self.upscalerQualityLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.upscalerQualityLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
     self.upscalerQualityLabel.textColor = SGRSecondary();
     self.upscalerQualityLabel.text = @"Source Quality: Lossless (High)";
     [upCard addSubview:self.upscalerQualityLabel];
 
+    [NSLayoutConstraint activateConstraints:@[
+        [upRow.leadingAnchor constraintEqualToAnchor:upCard.leadingAnchor constant:16],
+        [upRow.trailingAnchor constraintEqualToAnchor:upCard.trailingAnchor constant:-16],
+        [upRow.topAnchor constraintEqualToAnchor:upCard.topAnchor constant:12],
+
+        [self.upscalerSlider.leadingAnchor constraintEqualToAnchor:upCard.leadingAnchor constant:16],
+        [self.upscalerSlider.trailingAnchor constraintEqualToAnchor:upCard.trailingAnchor constant:-16],
+        [self.upscalerSlider.topAnchor constraintEqualToAnchor:upRow.bottomAnchor constant:8],
+        [self.upscalerSlider.heightAnchor constraintEqualToConstant:28],
+
+        [self.upscalerQualityLabel.leadingAnchor constraintEqualToAnchor:upCard.leadingAnchor constant:16],
+        [self.upscalerQualityLabel.trailingAnchor constraintEqualToAnchor:upCard.trailingAnchor constant:-16],
+        [self.upscalerQualityLabel.topAnchor constraintEqualToAnchor:self.upscalerSlider.bottomAnchor constant:6],
+    ]];
     [stack addArrangedSubview:upCard];
 
     // 2. Dynamic Restorer
     UILabel *restHeader = [self createSectionHeader:@"Dynamic Range Restorer"];
+    restHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [stack addArrangedSubview:restHeader];
 
     UIView *restCard = [self createCardView];
-    restCard.frame = CGRectMake(0, 0, 0, 100);
-    [restCard.heightAnchor constraintEqualToConstant:100].active = YES;
+    [restCard.heightAnchor constraintEqualToConstant:104].active = YES;
 
     UILabel *restTitle = [self createTitleLabel:@"De-Compress Mastering" subtitle:@"Multi-band expansion to undo loudness-war crushing"];
+    restTitle.translatesAutoresizingMaskIntoConstraints = NO;
+
     self.restorerSwitch = [[UISwitch alloc] init];
+    self.restorerSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     self.restorerSwitch.onTintColor = SGRAccent();
     [self.restorerSwitch addTarget:self action:@selector(restorerToggled:) forControlEvents:UIControlEventValueChanged];
 
     UIStackView *restRow = [[UIStackView alloc] initWithArrangedSubviews:@[restTitle, self.restorerSwitch]];
-    restRow.frame = CGRectMake(16, 12, self.view.bounds.size.width - 2 * kPadding - 32, 44);
-    restRow.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    restRow.translatesAutoresizingMaskIntoConstraints = NO;
+    restRow.alignment = UIStackViewAlignmentCenter;
     restRow.distribution = UIStackViewDistributionEqualSpacing;
     [restCard addSubview:restRow];
 
-    self.restorerSlider = [[UISlider alloc] initWithFrame:CGRectMake(16, 62, restCard.bounds.size.width - 32, 28)];
-    self.restorerSlider.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    self.restorerSlider = [[UISlider alloc] init];
+    self.restorerSlider.translatesAutoresizingMaskIntoConstraints = NO;
     self.restorerSlider.minimumValue = 0.0f;
     self.restorerSlider.maximumValue = 1.0f;
     self.restorerSlider.value = SGNagareGetRestorerIntensity();
@@ -460,29 +587,42 @@ static const CGFloat kPadding = 18.0;
     [self.restorerSlider addTarget:self action:@selector(restorerSliderMoved:) forControlEvents:UIControlEventValueChanged];
     [restCard addSubview:self.restorerSlider];
 
+    [NSLayoutConstraint activateConstraints:@[
+        [restRow.leadingAnchor constraintEqualToAnchor:restCard.leadingAnchor constant:16],
+        [restRow.trailingAnchor constraintEqualToAnchor:restCard.trailingAnchor constant:-16],
+        [restRow.topAnchor constraintEqualToAnchor:restCard.topAnchor constant:12],
+
+        [self.restorerSlider.leadingAnchor constraintEqualToAnchor:restCard.leadingAnchor constant:16],
+        [self.restorerSlider.trailingAnchor constraintEqualToAnchor:restCard.trailingAnchor constant:-16],
+        [self.restorerSlider.topAnchor constraintEqualToAnchor:restRow.bottomAnchor constant:10],
+        [self.restorerSlider.heightAnchor constraintEqualToConstant:28],
+    ]];
     [stack addArrangedSubview:restCard];
 
     // 3. HRTF Binaural Spatializer
     UILabel *hrtfHeader = [self createSectionHeader:@"Binaural HRTF (MIT KEMAR)"];
+    hrtfHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [stack addArrangedSubview:hrtfHeader];
 
     UIView *hrtfCard = [self createCardView];
-    hrtfCard.frame = CGRectMake(0, 0, 0, 100);
-    [hrtfCard.heightAnchor constraintEqualToConstant:100].active = YES;
+    [hrtfCard.heightAnchor constraintEqualToConstant:104].active = YES;
 
     UILabel *hrtfTitle = [self createTitleLabel:@"Head-Related Transfer Function" subtitle:@"Binaural virtual speakers over headphones"];
+    hrtfTitle.translatesAutoresizingMaskIntoConstraints = NO;
+
     self.hrtfSwitch = [[UISwitch alloc] init];
+    self.hrtfSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     self.hrtfSwitch.onTintColor = SGRAccent();
     [self.hrtfSwitch addTarget:self action:@selector(hrtfToggled:) forControlEvents:UIControlEventValueChanged];
 
     UIStackView *hrtfRow = [[UIStackView alloc] initWithArrangedSubviews:@[hrtfTitle, self.hrtfSwitch]];
-    hrtfRow.frame = CGRectMake(16, 12, self.view.bounds.size.width - 2 * kPadding - 32, 44);
-    hrtfRow.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    hrtfRow.translatesAutoresizingMaskIntoConstraints = NO;
+    hrtfRow.alignment = UIStackViewAlignmentCenter;
     hrtfRow.distribution = UIStackViewDistributionEqualSpacing;
     [hrtfCard addSubview:hrtfRow];
 
-    self.hrtfAngleSlider = [[UISlider alloc] initWithFrame:CGRectMake(16, 62, hrtfCard.bounds.size.width - 32, 28)];
-    self.hrtfAngleSlider.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    self.hrtfAngleSlider = [[UISlider alloc] init];
+    self.hrtfAngleSlider.translatesAutoresizingMaskIntoConstraints = NO;
     self.hrtfAngleSlider.minimumValue = -90.0f;
     self.hrtfAngleSlider.maximumValue = 90.0f;
     self.hrtfAngleSlider.value = SGNagareGetHRTFAngle();
@@ -490,6 +630,16 @@ static const CGFloat kPadding = 18.0;
     [self.hrtfAngleSlider addTarget:self action:@selector(hrtfAngleMoved:) forControlEvents:UIControlEventValueChanged];
     [hrtfCard addSubview:self.hrtfAngleSlider];
 
+    [NSLayoutConstraint activateConstraints:@[
+        [hrtfRow.leadingAnchor constraintEqualToAnchor:hrtfCard.leadingAnchor constant:16],
+        [hrtfRow.trailingAnchor constraintEqualToAnchor:hrtfCard.trailingAnchor constant:-16],
+        [hrtfRow.topAnchor constraintEqualToAnchor:hrtfCard.topAnchor constant:12],
+
+        [self.hrtfAngleSlider.leadingAnchor constraintEqualToAnchor:hrtfCard.leadingAnchor constant:16],
+        [self.hrtfAngleSlider.trailingAnchor constraintEqualToAnchor:hrtfCard.trailingAnchor constant:-16],
+        [self.hrtfAngleSlider.topAnchor constraintEqualToAnchor:hrtfRow.bottomAnchor constant:10],
+        [self.hrtfAngleSlider.heightAnchor constraintEqualToConstant:28],
+    ]];
     [stack addArrangedSubview:hrtfCard];
 }
 
@@ -497,12 +647,14 @@ static const CGFloat kPadding = 18.0;
 
 - (void)setupCoreChainTab {
     UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 16.0;
     self.coreChainTab = stack;
 
     // Smart Enhance
     UILabel *smartHeader = [self createSectionHeader:@"One-Touch Enhance"];
+    smartHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [stack addArrangedSubview:smartHeader];
 
     UIView *smartCard = [self createEffectCard:@"Smart Enhance"
@@ -515,6 +667,7 @@ static const CGFloat kPadding = 18.0;
 
     // Harmonic & Bass
     UILabel *harmHeader = [self createSectionHeader:@"Harmonics & Bass"];
+    harmHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [stack addArrangedSubview:harmHeader];
 
     UIView *vibeCard = [self createEffectCard:@"Virtual Bass (Missing Fundamental)"
@@ -543,6 +696,7 @@ static const CGFloat kPadding = 18.0;
 
     // Spatial & Acoustics
     UILabel *spatHeader = [self createSectionHeader:@"Spatial Audio & Acoustics"];
+    spatHeader.translatesAutoresizingMaskIntoConstraints = NO;
     [stack addArrangedSubview:spatHeader];
 
     UIView *widthCard = [self createEffectCard:@"Stereo Widener"
@@ -577,23 +731,25 @@ static const CGFloat kPadding = 18.0;
                 switchAction:(SEL)switchAction
                 sliderAction:(SEL)sliderAction {
     UIView *card = [self createCardView];
-    card.frame = CGRectMake(0, 0, 0, 100);
-    [card.heightAnchor constraintEqualToConstant:100].active = YES;
+    [card.heightAnchor constraintEqualToConstant:104].active = YES;
 
     UILabel *titleLabel = [self createTitleLabel:title subtitle:subtitle];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+
     UISwitch *sw = [[UISwitch alloc] init];
+    sw.translatesAutoresizingMaskIntoConstraints = NO;
     sw.onTintColor = SGRAccent();
     [sw addTarget:self action:switchAction forControlEvents:UIControlEventValueChanged];
     if (outSwitch) *outSwitch = sw;
 
     UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[titleLabel, sw]];
-    row.frame = CGRectMake(16, 12, self.view.bounds.size.width - 2 * kPadding - 32, 44);
-    row.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    row.translatesAutoresizingMaskIntoConstraints = NO;
+    row.alignment = UIStackViewAlignmentCenter;
     row.distribution = UIStackViewDistributionEqualSpacing;
     [card addSubview:row];
 
-    UISlider *sl = [[UISlider alloc] initWithFrame:CGRectMake(16, 62, card.bounds.size.width - 32, 28)];
-    sl.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    UISlider *sl = [[UISlider alloc] init];
+    sl.translatesAutoresizingMaskIntoConstraints = NO;
     sl.minimumValue = 0.0f;
     sl.maximumValue = 1.0f;
     sl.value = 0.5f;
@@ -602,6 +758,17 @@ static const CGFloat kPadding = 18.0;
     [card addSubview:sl];
     if (outSlider) *outSlider = sl;
 
+    [NSLayoutConstraint activateConstraints:@[
+        [row.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [row.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [row.topAnchor constraintEqualToAnchor:card.topAnchor constant:12],
+
+        [sl.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [sl.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [sl.topAnchor constraintEqualToAnchor:row.bottomAnchor constant:10],
+        [sl.heightAnchor constraintEqualToConstant:28],
+    ]];
+
     return card;
 }
 
@@ -609,6 +776,7 @@ static const CGFloat kPadding = 18.0;
 
 - (UIView *)createCardView {
     UIView *card = [[UIView alloc] init];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor = SGRSolidGlassFill();
     card.layer.cornerRadius = SGRRadiusCard;
     card.layer.cornerCurve = kCACornerCurveContinuous;
@@ -618,6 +786,7 @@ static const CGFloat kPadding = 18.0;
 
 - (UILabel *)createSectionHeader:(NSString *)title {
     UILabel *label = [[UILabel alloc] init];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = [title uppercaseString];
     label.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBold];
     label.textColor = SGRTertiary();
@@ -626,6 +795,7 @@ static const CGFloat kPadding = 18.0;
 
 - (UILabel *)createTitleLabel:(NSString *)title subtitle:(NSString *)subtitle {
     UILabel *label = [[UILabel alloc] init];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
     label.numberOfLines = 2;
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:title attributes:@{
@@ -647,7 +817,7 @@ static const CGFloat kPadding = 18.0;
 
 - (void)refreshControlsState {
     self.stemsMasterSwitch.on = SGNagareIsStemsEnabled();
-    self.modePicker.selectedSegmentIndex = SGNagareGetSeparationMode();
+    self.modePicker.selectedSegmentIndex = SegmentIndexFromNagareMode(SGNagareGetSeparationMode());
 
     float v = 1, d = 1, b = 1, o = 1;
     SGNagareGetStemLevels(&v, &d, &b, &o);
@@ -683,7 +853,7 @@ static const CGFloat kPadding = 18.0;
 }
 
 - (void)modePicked:(UISegmentedControl *)sender {
-    int mode = (int)sender.selectedSegmentIndex;
+    int mode = NagareModeFromSegmentIndex(sender.selectedSegmentIndex);
     SGNagareSetSeparationMode(mode);
 
     // Apply presets
@@ -694,10 +864,10 @@ static const CGFloat kPadding = 18.0;
         case 2: // Vocals Only
             [self applyStemLevelsVocals:1.0f drums:0.0f bass:0.0f other:0.0f];
             break;
-        case 3: // Drums Emphasis
+        case 4: // Drums Emphasis
             [self applyStemLevelsVocals:0.0f drums:1.5f bass:0.5f other:0.2f];
             break;
-        case 4: // Bass Boost
+        case 3: // Bass Boost
             [self applyStemLevelsVocals:0.4f drums:0.8f bass:1.5f other:0.4f];
             break;
         case 5: // Backing / Instrumental
@@ -729,7 +899,7 @@ static const CGFloat kPadding = 18.0;
 - (void)vocalsSliderMoved:(UISlider *)sender {
     self.vocalsLabel.text = [NSString stringWithFormat:@"%.0f%%", sender.value * 100];
     self.modePicker.selectedSegmentIndex = 0; // Custom
-    SGNagareSetSeparationMode(0);
+    SGNagareSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
     SGNagareSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
     if (!self.stemsMasterSwitch.isOn) {
         [self.stemsMasterSwitch setOn:YES animated:YES];
@@ -740,7 +910,7 @@ static const CGFloat kPadding = 18.0;
 - (void)drumsSliderMoved:(UISlider *)sender {
     self.drumsLabel.text = [NSString stringWithFormat:@"%.0f%%", sender.value * 100];
     self.modePicker.selectedSegmentIndex = 0; // Custom
-    SGNagareSetSeparationMode(0);
+    SGNagareSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
     SGNagareSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
     if (!self.stemsMasterSwitch.isOn) {
         [self.stemsMasterSwitch setOn:YES animated:YES];
@@ -751,7 +921,7 @@ static const CGFloat kPadding = 18.0;
 - (void)bassSliderMoved:(UISlider *)sender {
     self.bassLabel.text = [NSString stringWithFormat:@"%.0f%%", sender.value * 100];
     self.modePicker.selectedSegmentIndex = 0; // Custom
-    SGNagareSetSeparationMode(0);
+    SGNagareSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
     SGNagareSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
     if (!self.stemsMasterSwitch.isOn) {
         [self.stemsMasterSwitch setOn:YES animated:YES];
@@ -762,7 +932,7 @@ static const CGFloat kPadding = 18.0;
 - (void)otherSliderMoved:(UISlider *)sender {
     self.otherLabel.text = [NSString stringWithFormat:@"%.0f%%", sender.value * 100];
     self.modePicker.selectedSegmentIndex = 0; // Custom
-    SGNagareSetSeparationMode(0);
+    SGNagareSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
     SGNagareSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
     if (!self.stemsMasterSwitch.isOn) {
         [self.stemsMasterSwitch setOn:YES animated:YES];
@@ -773,7 +943,7 @@ static const CGFloat kPadding = 18.0;
 - (void)resetStemsTapped {
     [self applyStemLevelsVocals:1.0f drums:1.0f bass:1.0f other:1.0f];
     self.modePicker.selectedSegmentIndex = 0;
-    SGNagareSetSeparationMode(0);
+    SGNagareSetSeparationMode(6);
 }
 
 // Subsystems

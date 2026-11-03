@@ -168,7 +168,11 @@ void loadPreferences() {
         g_stemOther.store([ud floatForKey:SGKeyNagareStemsOther], std::memory_order_relaxed);
     }
     if ([ud objectForKey:SGKeyNagareStemsMode]) {
-        g_stemMode.store((int)[ud integerForKey:SGKeyNagareStemsMode], std::memory_order_relaxed);
+        int m = (int)[ud integerForKey:SGKeyNagareStemsMode];
+        if (m == 0) m = 6; // SEPARATOR_MODE_CUSTOM
+        g_stemMode.store(m, std::memory_order_relaxed);
+    } else {
+        g_stemMode.store(6, std::memory_order_relaxed);
     }
 
     if ([ud objectForKey:SGKeyNagareUpscalerEnabled]) {
@@ -304,8 +308,13 @@ void applyAllDSPState() {
     if (rate <= 0) rate = 44100;
 
     // Stem Separator
+    int currentMode = g_stemMode.load(std::memory_order_relaxed);
+    if (currentMode == 0 && g_stemsEnabled.load(std::memory_order_relaxed)) {
+        currentMode = 6;
+        g_stemMode.store(6, std::memory_order_relaxed);
+    }
     separator_enable(g_stemsEnabled.load(std::memory_order_relaxed));
-    separator_set_mode((SeparatorMode)g_stemMode.load(std::memory_order_relaxed));
+    separator_set_mode((SeparatorMode)currentMode);
     separator_set_stem_levels(
         g_stemVocals.load(std::memory_order_relaxed),
         g_stemBass.load(std::memory_order_relaxed),
@@ -414,7 +423,6 @@ void prepareOutput(AudioUnit unit) {
 
 OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *timestamp,
                           UInt32 bus, UInt32 frames, AudioBufferList *data) {
-    (void)refCon;
     (void)timestamp;
     if (!(*flags & kAudioUnitRenderAction_PostRender) || bus != 0 || !data || !data->mNumberBuffers || !frames) return noErr;
 
@@ -428,6 +436,26 @@ OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const
     if (!stems && !upscaler && !restorer && !hrtf && !core) return noErr;
 
     uint64_t layout = g_layout.load(std::memory_order_relaxed);
+    if (layout == 0) {
+        if (refCon) {
+            prepareOutput((AudioUnit)refCon);
+            layout = g_layout.load(std::memory_order_relaxed);
+        }
+        if (layout == 0) {
+            // Auto-heal: inspect data buffer directly
+            if (data->mNumberBuffers >= 2 && data->mBuffers[0].mDataByteSize == frames * sizeof(float)) {
+                UInt32 flagsVal = kAudioFormatFlagIsFloat | kAudioFormatFlagIsNonInterleaved;
+                UInt32 chVal = 2, byteVal = 4;
+                layout = (uint64_t)flagsVal | ((uint64_t)chVal << 32) | ((uint64_t)byteVal << 48);
+                g_layout.store(layout, std::memory_order_relaxed);
+            } else if (data->mNumberBuffers == 1 && data->mBuffers[0].mDataByteSize == frames * 2 * sizeof(float)) {
+                UInt32 flagsVal = kAudioFormatFlagIsFloat;
+                UInt32 chVal = 2, byteVal = 4;
+                layout = (uint64_t)flagsVal | ((uint64_t)chVal << 32) | ((uint64_t)byteVal << 48);
+                g_layout.store(layout, std::memory_order_relaxed);
+            }
+        }
+    }
     UInt32 formatFlags = (UInt32)layout, channels = (UInt32)(layout >> 32) & 0xffff, bytes = (UInt32)(layout >> 48);
     BOOL isFloat = (formatFlags & kAudioFormatFlagIsFloat) != 0;
     BOOL split = (formatFlags & kAudioFormatFlagIsNonInterleaved) != 0;
@@ -602,6 +630,11 @@ const SGAudioProcessor *SGNagareGetAudioProcessor(void) {
 void SGNagareSetStemsEnabled(BOOL enabled) {
     g_stemsEnabled.store(enabled, std::memory_order_release);
     separator_enable(enabled);
+    if (enabled && (separator_get_mode() == SEPARATOR_MODE_NORMAL || g_stemMode.load(std::memory_order_relaxed) == SEPARATOR_MODE_NORMAL)) {
+        separator_set_mode(SEPARATOR_MODE_CUSTOM);
+        g_stemMode.store(SEPARATOR_MODE_CUSTOM, std::memory_order_relaxed);
+        [NSUserDefaults.standardUserDefaults setInteger:SEPARATOR_MODE_CUSTOM forKey:SGKeyNagareStemsMode];
+    }
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:SGKeyNagareStemsEnabled];
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
 }
@@ -620,6 +653,17 @@ void SGNagareSetStemLevels(float vocals, float drums, float bass, float other) {
     g_stemDrums.store(drums, std::memory_order_relaxed);
     g_stemBass.store(bass, std::memory_order_relaxed);
     g_stemOther.store(other, std::memory_order_relaxed);
+
+    if (vocals != 1.0f || drums != 1.0f || bass != 1.0f || other != 1.0f) {
+        if (!g_stemsEnabled.load(std::memory_order_relaxed)) {
+            g_stemsEnabled.store(true, std::memory_order_release);
+            separator_enable(true);
+        }
+        if (separator_get_mode() == SEPARATOR_MODE_NORMAL) {
+            separator_set_mode(SEPARATOR_MODE_CUSTOM);
+            g_stemMode.store(SEPARATOR_MODE_CUSTOM, std::memory_order_relaxed);
+        }
+    }
 
     separator_set_stem_levels(vocals, bass, drums, other);
 
