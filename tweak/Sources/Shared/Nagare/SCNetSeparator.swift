@@ -8,7 +8,7 @@
 import CoreML
 import Foundation
 
-public struct SCNetSeparatedStems {
+public struct SCNetSeparatedStems: Sendable {
     public let drums: [Float]
     public let bass: [Float]
     public let other: [Float]
@@ -75,7 +75,7 @@ public actor SCNetSeparator {
         }
 
         // 2. Run Core ML Prediction on GPU
-        let prediction = try model.prediction(from: featureProvider)
+        let prediction = try await model.prediction(from: featureProvider)
         guard let outputFeature = prediction.featureValue(for: "separated")?.multiArrayValue else {
             throw SCNetError.predictionFailed
         }

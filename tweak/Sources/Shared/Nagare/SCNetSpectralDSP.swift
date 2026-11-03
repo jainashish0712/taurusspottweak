@@ -9,7 +9,7 @@ import Accelerate
 import Foundation
 
 @available(iOS 18.0, macOS 27.0, *)
-public final class SCNetSpectralDSP {
+public final class SCNetSpectralDSP: @unchecked Sendable {
     public static let fftSize = 4096
     public static let hopSize = 1024
     public static let timeFrames = 476
@@ -141,7 +141,7 @@ public final class SCNetSpectralDSP {
             let imagChBase = chBase + strideChannel
 
             // Clear overlap accumulator
-            vDSP_vclr(&overlapAccumulator, 1, vDSP_Length(overlapAccumulator.count))
+            overlapAccumulator.withUnsafeMutableBufferPointer { vDSP_vclr($0.baseAddress!, 1, vDSP_Length($0.count)) }
 
             for frame in 0..<Self.timeFrames {
                 // Populate bins

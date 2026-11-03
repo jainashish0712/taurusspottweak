@@ -16,7 +16,7 @@ public typealias SCNetWriteCallback = @convention(c) (
 ) -> Void
 
 @available(iOS 18.0, macOS 27.0, *)
-private final class SCNetWorkerSession {
+private final class SCNetWorkerSession: @unchecked Sendable {
     static let shared = SCNetWorkerSession()
 
     private var separator: SCNetSeparator?
