@@ -49,7 +49,7 @@ private final class SGSpleeterWorkerSession: @unchecked Sendable {
             guard let self = self else { return }
             do {
                 let url = URL(fileURLWithPath: modelPath)
-                let sep = try await SGSpleeterSeparator(modelURL: url)
+                let sep = try SGSpleeterSeparator(modelURL: url)
                 try await sep.warmUp()
                 self.separator = sep
                 self.isModelReady = true

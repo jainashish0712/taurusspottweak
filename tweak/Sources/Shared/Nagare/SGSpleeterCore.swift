@@ -129,13 +129,15 @@ public final class SGSpleeterSTFT: @unchecked Sendable {
         let scale = Float(1.0 / Float(SGSpleeterSTFT.fftSize))
 
         for (i, (rFrame, iFrame)) in zip(spectrogram.realFrames, spectrogram.imagFrames).enumerated() {
-            realBuf.assign(repeating: 0.0)
-            imagBuf.assign(repeating: 0.0)
-
             let count = min(rFrame.count, halfFFT)
-            for k in 0..<count {
-                realBuf[k] = rFrame[k]
-                imagBuf[k] = iFrame[k]
+            for k in 0..<halfFFT {
+                if k < count {
+                    realBuf[k] = rFrame[k]
+                    imagBuf[k] = iFrame[k]
+                } else {
+                    realBuf[k] = 0.0
+                    imagBuf[k] = 0.0
+                }
             }
 
             realBuf.withUnsafeMutableBufferPointer { rPtr in
@@ -186,7 +188,7 @@ public actor SGSpleeterSeparator {
     private let inputTensor: MLMultiArray
     private let featureProvider: MLDictionaryFeatureProvider
 
-    public init(modelURL: URL) async throws {
+    public init(modelURL: URL) throws {
         guard let stftInstance = SGSpleeterSTFT() else {
             throw SGSpleeterError.invalidModel
         }
@@ -206,12 +208,12 @@ public actor SGSpleeterSeparator {
         self.featureProvider = try MLDictionaryFeatureProvider(dictionary: ["magnitude": tensor])
     }
 
-    public func warmUp() async throws {
+    public func warmUp() throws {
         let dummy = [Float](repeating: 0.0, count: SGSpleeterSTFT.chunkSamples * 2)
-        _ = try await separate(stereoPcm: dummy)
+        _ = try separate(stereoPcm: dummy)
     }
 
-    public func separate(stereoPcm: [Float]) async throws -> SGSpleeterSeparatedStems {
+    public func separate(stereoPcm: [Float]) throws -> SGSpleeterSeparatedStems {
         let expectedCount = SGSpleeterSTFT.chunkSamples * 2
         guard stereoPcm.count >= expectedCount else {
             throw SGSpleeterError.invalidInput
@@ -256,7 +258,7 @@ public actor SGSpleeterSeparator {
         }
 
         // 3. Core ML Model Prediction on Apple Neural Engine / GPU
-        let prediction = try await model.prediction(from: featureProvider)
+        let prediction = try model.prediction(from: featureProvider)
 
         guard let vocalsArray = prediction.featureValue(for: "vocalsMask")?.multiArrayValue,
               let drumsArray = prediction.featureValue(for: "drumsMask")?.multiArrayValue,
