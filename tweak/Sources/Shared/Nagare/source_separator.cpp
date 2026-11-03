@@ -88,7 +88,8 @@ struct SeparatorState {
     float input_buffer_right[FFT_SIZE];
     float output_buffer_left[FFT_SIZE];
     float output_buffer_right[FFT_SIZE];
-    int buffer_pos;
+    int hop_pos;
+    int warmup_hops;
 
     // HPSS: Previous frame for percussive detection
     float prev_mag_l[FFT_SIZE / 2];
@@ -166,7 +167,7 @@ static void fft_inverse(float* real, float* imag, int n) {
 
 static void create_hann_window(float* window, int size) {
     for (int i = 0; i < size; i++) {
-        window[i] = 0.5f * (1.0f - cosf(TWO_PI * i / (size - 1)));
+        window[i] = 0.5f * (1.0f - cosf(TWO_PI * i / (float)size));
     }
 }
 
@@ -356,18 +357,22 @@ static void apply_custom_mix(SeparatorState& s) {
         float mid_gain = 1.0f;
         float side_gain = 1.0f;
 
-        // Bass region
+        // Bass region (< ~215 Hz)
         if (i < BASS_CUTOFF_BIN) {
             mid_gain = s.bass_level;
             side_gain = s.bass_level;
         }
-        // Vocal region (center-panned)
+        // Vocal region (center-panned, ~322 Hz to 8.6 kHz)
         else if (i >= VOCAL_LOW_BIN && i <= VOCAL_HIGH_BIN) {
-            // Apply vocal level to mid, other level to side
-            mid_gain = s.vocal_level;
+            float mid_mag = get_magnitude(s.mid_real[i], s.mid_imag[i]);
+            float side_mag = get_magnitude(s.side_real[i], s.side_imag[i]);
+            float total = mid_mag + side_mag + 0.0001f;
+            float center_ratio = mid_mag / total; // ~1.0 for center vocal
+
+            mid_gain = center_ratio * s.vocal_level + (1.0f - center_ratio) * s.other_level;
             side_gain = s.other_level;
         }
-        // Other
+        // Other (high frequency > 8.6kHz)
         else {
             mid_gain = s.other_level;
             side_gain = s.other_level;
@@ -379,7 +384,7 @@ static void apply_custom_mix(SeparatorState& s) {
         float avg_mag = 0.5f * (mag_l + mag_r);
         float prev_mag = 0.5f * (s.prev_mag_l[i] + s.prev_mag_r[i]);
         float flux = std::max(0.0f, avg_mag - prev_mag);
-        float transient = std::min(1.0f, flux / (prev_mag + 0.0001f));
+        float transient = std::min(1.0f, flux / (prev_mag + 0.1f));
 
         float eff_mid = (1.0f - transient) * mid_gain + transient * s.drums_level;
         float eff_side = (1.0f - transient) * side_gain + transient * s.drums_level;
@@ -388,6 +393,10 @@ static void apply_custom_mix(SeparatorState& s) {
         s.mid_imag[i] *= eff_mid;
         s.side_real[i] *= eff_side;
         s.side_imag[i] *= eff_side;
+
+        // Update previous frame magnitude for HPSS transient detection
+        s.prev_mag_l[i] = mag_l;
+        s.prev_mag_r[i] = mag_r;
     }
 
     // Mirror
@@ -496,13 +505,6 @@ inverse_fft:
     // Inverse FFT
     fft_inverse(s.fft_real_l, s.fft_imag_l, FFT_SIZE);
     fft_inverse(s.fft_real_r, s.fft_imag_r, FFT_SIZE);
-
-    // Apply window, overlap-add, and normalize 75% Hann overlap (sum(w^2) = 1.5 => scale = 2/3)
-    constexpr float norm_scale = 2.0f / 3.0f;
-    for (int i = 0; i < FFT_SIZE; i++) {
-        s.output_buffer_left[i] += s.fft_real_l[i] * s.window[i] * norm_scale;
-        s.output_buffer_right[i] += s.fft_real_r[i] * s.window[i] * norm_scale;
-    }
 }
 
 // ============================================================================
@@ -525,6 +527,9 @@ int separator_init(int sample_rate) {
 
     create_hann_window(g_separator.window, FFT_SIZE);
 
+    g_separator.hop_pos = 0;
+    g_separator.warmup_hops = 0;
+    g_separator.has_valid_output = false;
     g_separator.initialized = true;
     return 0;
 }
@@ -534,6 +539,15 @@ void separator_release(void) {
 }
 
 void separator_enable(bool enabled) {
+    if (enabled && !g_separator.enabled) {
+        memset(g_separator.input_buffer_left, 0, sizeof(g_separator.input_buffer_left));
+        memset(g_separator.input_buffer_right, 0, sizeof(g_separator.input_buffer_right));
+        memset(g_separator.output_buffer_left, 0, sizeof(g_separator.output_buffer_left));
+        memset(g_separator.output_buffer_right, 0, sizeof(g_separator.output_buffer_right));
+        g_separator.hop_pos = 0;
+        g_separator.warmup_hops = 0;
+        g_separator.has_valid_output = false;
+    }
     g_separator.enabled = enabled;
 }
 
@@ -570,37 +584,46 @@ void separator_process(float* left, float* right, int num_frames) {
     if (g_separator.mode == SEPARATOR_MODE_NORMAL) return;
 
     SeparatorState& s = g_separator;
+    constexpr float norm_scale = 2.0f / 3.0f;
 
     for (int n = 0; n < num_frames; n++) {
-        s.input_buffer_left[s.buffer_pos] = left[n];
-        s.input_buffer_right[s.buffer_pos] = right[n];
+        float proc_l = s.output_buffer_left[s.hop_pos];
+        float proc_r = s.output_buffer_right[s.hop_pos];
 
-        float proc_l = s.output_buffer_left[s.buffer_pos];
-        float proc_r = s.output_buffer_right[s.buffer_pos];
+        s.input_buffer_left[(FFT_SIZE - HOP_SIZE) + s.hop_pos] = left[n];
+        s.input_buffer_right[(FFT_SIZE - HOP_SIZE) + s.hop_pos] = right[n];
 
-        s.output_buffer_left[s.buffer_pos] = 0.0f;
-        s.output_buffer_right[s.buffer_pos] = 0.0f;
-
-        s.buffer_pos++;
-
-        if (s.buffer_pos >= FFT_SIZE) {
+        s.hop_pos++;
+        if (s.hop_pos >= HOP_SIZE) {
             process_frame(s);
 
-            memmove(s.input_buffer_left, s.input_buffer_left + HOP_SIZE,
-                    (FFT_SIZE - HOP_SIZE) * sizeof(float));
-            memmove(s.input_buffer_right, s.input_buffer_right + HOP_SIZE,
-                    (FFT_SIZE - HOP_SIZE) * sizeof(float));
-
+            // Shift output buffer left by HOP_SIZE
             memmove(s.output_buffer_left, s.output_buffer_left + HOP_SIZE,
                     (FFT_SIZE - HOP_SIZE) * sizeof(float));
             memmove(s.output_buffer_right, s.output_buffer_right + HOP_SIZE,
                     (FFT_SIZE - HOP_SIZE) * sizeof(float));
-
             memset(s.output_buffer_left + (FFT_SIZE - HOP_SIZE), 0, HOP_SIZE * sizeof(float));
             memset(s.output_buffer_right + (FFT_SIZE - HOP_SIZE), 0, HOP_SIZE * sizeof(float));
 
-            s.buffer_pos = FFT_SIZE - HOP_SIZE;
-            s.has_valid_output = true;
+            // Overlap-add the synthesis grain
+            for (int i = 0; i < FFT_SIZE; i++) {
+                s.output_buffer_left[i] += s.fft_real_l[i] * s.window[i] * norm_scale;
+                s.output_buffer_right[i] += s.fft_real_r[i] * s.window[i] * norm_scale;
+            }
+
+            // Shift input buffer left by HOP_SIZE
+            memmove(s.input_buffer_left, s.input_buffer_left + HOP_SIZE,
+                    (FFT_SIZE - HOP_SIZE) * sizeof(float));
+            memmove(s.input_buffer_right, s.input_buffer_right + HOP_SIZE,
+                    (FFT_SIZE - HOP_SIZE) * sizeof(float));
+            memset(s.input_buffer_left + (FFT_SIZE - HOP_SIZE), 0, HOP_SIZE * sizeof(float));
+            memset(s.input_buffer_right + (FFT_SIZE - HOP_SIZE), 0, HOP_SIZE * sizeof(float));
+
+            s.hop_pos = 0;
+            s.warmup_hops++;
+            if (s.warmup_hops >= (FFT_SIZE / HOP_SIZE)) {
+                s.has_valid_output = true;
+            }
         }
 
         if (s.has_valid_output) {
