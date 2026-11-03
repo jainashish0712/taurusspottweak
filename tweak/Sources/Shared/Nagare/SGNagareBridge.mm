@@ -397,7 +397,7 @@ inline void writeSample(void *data, UInt32 index, float value, UInt32 bytes, BOO
 
 // Pipeline callbacks
 void prepareOutput(AudioUnit unit) {
-    AudioStreamBasicDescription format = {0};
+    AudioStreamBasicDescription format = {};
     UInt32 size = sizeof(format);
     OSStatus status = AudioUnitGetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &format, &size);
     if (status != noErr || format.mFormatID != kAudioFormatLinearPCM || format.mSampleRate <= 0) return;
@@ -412,6 +412,8 @@ void prepareOutput(AudioUnit unit) {
 
 OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *timestamp,
                           UInt32 bus, UInt32 frames, AudioBufferList *data) {
+    (void)refCon;
+    (void)timestamp;
     if (!(*flags & kAudioUnitRenderAction_PostRender) || bus != 0 || !data || !data->mNumberBuffers || !frames) return noErr;
 
     // Check if any Nagare processing is active
@@ -685,7 +687,7 @@ void SGNagareSetUpscalerCutoff(float cutoffHz) {
 }
 
 int SGNagareGetDetectedSourceQuality(void) {
-    return upscaler_get_source_quality();
+    return upscaler_get_detected_quality();
 }
 
 // Dynamic Restorer

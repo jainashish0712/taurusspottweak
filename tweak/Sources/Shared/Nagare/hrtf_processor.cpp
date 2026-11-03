@@ -669,7 +669,8 @@ void hrtf_set_distance(float distance_meters) {
 void hrtf_process(float* left, float* right, int num_frames) {
     if (!hrtf::g_enabled || num_frames <= 0) return;
 
-    // Distance attenuation (inverse square law, gentle)
+    // Room size and distance attenuation
+    (void)hrtf::g_room_size;
     float distance_gain = 1.0f / (1.0f + (hrtf::g_distance - 1.0f) * 0.1f);
 
     // Temporary buffers for per-path convolution output
@@ -700,6 +701,7 @@ void hrtf_process(float* left, float* right, int num_frames) {
 }
 
 void hrtf_set_preset(int preset_id) {
+    (void)preset_id;
     // Presets adjust the HRIR scaling for different head sizes
     // 0 = Generic (default)
     // 1 = Small head (less ITD)

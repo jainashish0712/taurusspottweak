@@ -2,6 +2,7 @@
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Shared/Nagare/SGNagareBridge.h"
+#import <math.h>
 
 static const CGFloat kPadding = 18.0;
 
@@ -64,19 +65,13 @@ static const CGFloat kPadding = 18.0;
 
 + (void)presentFromCurrentPlayer {
     UIViewController *topVC = nil;
-    UIWindow *keyWindow = nil;
-    for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
-        if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
-            for (UIWindow *w in scene.windows) {
-                if (w.isKeyWindow) {
-                    keyWindow = w;
-                    break;
-                }
-            }
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class]) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            if (window.hidden) continue;
+            if (!topVC || window.isKeyWindow) topVC = window.rootViewController;
         }
     }
-    if (!keyWindow) keyWindow = UIApplication.sharedApplication.windows.firstObject;
-    topVC = keyWindow.rootViewController;
     while (topVC.presentedViewController) {
         topVC = topVC.presentedViewController;
     }
@@ -161,10 +156,10 @@ static const CGFloat kPadding = 18.0;
     float bassMult = self.bassSlider.value;
     float otherMult = self.otherSlider.value;
 
-    self.vocalsMeter.progress = std::min(1.0f, v * vocalsMult * 4.0f);
-    self.drumsMeter.progress = std::min(1.0f, d * drumsMult * 4.0f);
-    self.bassMeter.progress = std::min(1.0f, b * bassMult * 4.0f);
-    self.otherMeter.progress = std::min(1.0f, o * otherMult * 4.0f);
+    self.vocalsMeter.progress = fminf(1.0f, v * vocalsMult * 4.0f);
+    self.drumsMeter.progress = fminf(1.0f, d * drumsMult * 4.0f);
+    self.bassMeter.progress = fminf(1.0f, b * bassMult * 4.0f);
+    self.otherMeter.progress = fminf(1.0f, o * otherMult * 4.0f);
 }
 
 #pragma mark - Header & Layout
@@ -341,9 +336,9 @@ static const CGFloat kPadding = 18.0;
 - (UIView *)createStemSliderRow:(NSString *)title
                          symbol:(NSString *)symbol
                           color:(UIColor *)color
-                         slider:(UISlider **)outSlider
-                          label:(UILabel **)outLabel
-                          meter:(UIProgressView **)outMeter
+                         slider:(UISlider * __strong *)outSlider
+                          label:(UILabel * __strong *)outLabel
+                          meter:(UIProgressView * __strong *)outMeter
                          action:(SEL)action {
     UIView *card = [self createCardView];
     card.frame = CGRectMake(0, 0, 0, 84);
@@ -357,7 +352,7 @@ static const CGFloat kPadding = 18.0;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(48, 14, 180, 24)];
     titleLabel.text = title;
-    titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemiBold];
+    titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     titleLabel.textColor = SGRPrimary();
     [card addSubview:titleLabel];
 
@@ -577,8 +572,8 @@ static const CGFloat kPadding = 18.0;
 
 - (UIView *)createEffectCard:(NSString *)title
                     subtitle:(NSString *)subtitle
-                   outSwitch:(UISwitch **)outSwitch
-                   outSlider:(UISlider **)outSlider
+                   outSwitch:(UISwitch * __strong *)outSwitch
+                   outSlider:(UISlider * __strong *)outSlider
                 switchAction:(SEL)switchAction
                 sliderAction:(SEL)sliderAction {
     UIView *card = [self createCardView];
@@ -634,7 +629,7 @@ static const CGFloat kPadding = 18.0;
     label.numberOfLines = 2;
 
     NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:title attributes:@{
-        NSFontAttributeName: [UIFont systemFontOfSize:15 weight:UIFontWeightSemiBold],
+        NSFontAttributeName: [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold],
         NSForegroundColorAttributeName: SGRPrimary()
     }];
     if (subtitle) {

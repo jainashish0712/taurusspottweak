@@ -1121,8 +1121,8 @@ public:
         // Coefficient = exp(-1 / (ramp_time_ms * 0.001 * sample_rate))
         param_smooth_coeff = std::exp(-1.0f / (50.0f * 0.001f * sample_rate));
 
-        fft = std::make_unique<FFT>(2048);
-        reverb = std::make_unique<Reverb>(static_cast<float>(sample_rate));
+        fft = std::unique_ptr<FFT>(new FFT(2048));
+        reverb = std::unique_ptr<Reverb>(new Reverb(static_cast<float>(sample_rate)));
 
         // Initialize EQ bands (10-band graphic defaults; per-band frequency and
         // Q can be overridden afterwards via setEQBandParams for parametric use)
