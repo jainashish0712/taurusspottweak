@@ -2,6 +2,8 @@
 #import "nagare_dsp.h"
 #import "source_separator.h"
 #import "SCNetEngine.h"
+#import "SGSpleeterEngine.h"
+#import "SGSpleeterModelManager.h"
 #import "hrtf_processor.h"
 #import "polyphase_resampler.h"
 #import "audio_upscaler.h"
@@ -482,9 +484,9 @@ OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const
             memset(right, 0, frames * sizeof(float));
         }
 
-        // 1. 4-Stem Source Separation (Real-Time SIMD DSP Engine)
+        // 1. 4-Stem Source Separation (Spleeter Neural Engine)
         if (stems) {
-            separator_process(left, right, frames);
+            spleeter_engine_process(left, right, frames);
         }
 
         // 2. Audio Upscaler (SBR / DSEE)
@@ -545,7 +547,7 @@ OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const
         }
 
         if (stems) {
-            separator_process(s_scratchLeft, s_scratchRight, count);
+            spleeter_engine_process(s_scratchLeft, s_scratchRight, count);
         }
         if (upscaler) {
             upscaler_process(s_scratchLeft, s_scratchRight, count);
@@ -614,6 +616,7 @@ void SGNagareInit(double sampleRate) {
     nagare_init((int)sampleRate, 2, 1024);
     separator_init((int)sampleRate);
     scnet_engine_init((int)sampleRate);
+    spleeter_engine_init((int)sampleRate);
     upscaler_init((int)sampleRate);
     restorer_init((int)sampleRate);
     hrtf_init((int)sampleRate);
@@ -636,6 +639,7 @@ void SGNagareReset(void) {
     nagare_release();
     separator_release();
     scnet_engine_release();
+    spleeter_engine_release();
     upscaler_release();
     restorer_release();
     hrtf_release();
@@ -650,6 +654,7 @@ const SGAudioProcessor *SGNagareGetAudioProcessor(void) {
 void SGNagareSetStemsEnabled(BOOL enabled) {
     g_stemsEnabled.store(enabled, std::memory_order_release);
     separator_enable(enabled);
+    spleeter_engine_set_enabled(enabled);
     if (enabled && (separator_get_mode() == SEPARATOR_MODE_NORMAL || g_stemMode.load(std::memory_order_relaxed) == SEPARATOR_MODE_NORMAL)) {
         separator_set_mode(SEPARATOR_MODE_CUSTOM);
         g_stemMode.store(SEPARATOR_MODE_CUSTOM, std::memory_order_relaxed);
@@ -663,8 +668,16 @@ BOOL SGNagareIsStemsEnabled(void) {
     return g_stemsEnabled.load(std::memory_order_relaxed);
 }
 
+BOOL SGNagareIsSpleeterReady(void) {
+    return spleeter_engine_is_ready();
+}
+
 BOOL SGNagareIsSCNetReady(void) {
-    return scnet_engine_is_ready();
+    return spleeter_engine_is_ready();
+}
+
+void SGNagareReloadSpleeter(void) {
+    spleeter_engine_reload();
 }
 
 void SGNagareSetStemLevels(float vocals, float drums, float bass, float other) {
@@ -690,6 +703,7 @@ void SGNagareSetStemLevels(float vocals, float drums, float bass, float other) {
     }
 
     separator_set_stem_levels(vocals, bass, drums, other);
+    spleeter_engine_set_stem_levels(vocals, drums, bass, other);
 
     NSUserDefaults *ud = NSUserDefaults.standardUserDefaults;
     [ud setFloat:vocals forKey:SGKeyNagareStemsVocals];
@@ -707,12 +721,7 @@ void SGNagareGetStemLevels(float *vocals, float *drums, float *bass, float *othe
 }
 
 void SGNagareGetStemMeters(float *vocals, float *drums, float *bass, float *other) {
-    float v = 0.0f, b = 0.0f, d = 0.0f, o = 0.0f;
-    separator_get_stem_levels(&v, &b, &d, &o);
-    if (vocals) *vocals = v;
-    if (drums) *drums = d;
-    if (bass) *bass = b;
-    if (other) *other = o;
+    spleeter_engine_get_stem_meters(vocals, drums, bass, other);
 }
 
 void SGNagareSetSeparationMode(int mode) {
@@ -990,6 +999,7 @@ void SGNagareGetFFTMagnitudes(float *output, int fftSize) {
 - (void)playerStateDidChange:(SPTPlayerState *)state {
     NSString *uri = SGURIString(state.track.URI);
     if (self.lastTrackURI && uri && ![self.lastTrackURI isEqualToString:uri]) {
+        spleeter_engine_clear();
         if (separator_is_enabled()) {
             separator_enable(true);
         }
@@ -1003,6 +1013,7 @@ static SGNagareTrackWatcher *s_trackWatcher = nil;
 // Auto-register into SGAudioPipeline upon tweak load
 __attribute__((used, constructor)) static void SGNagareAutoRegister(void) {
     SGNagareInit(44100.0);
+    [[SGSpleeterModelManager sharedManager] startDownloadIfNeeded];
     SGAudioPipelineRegister(SGAudioStageNagare, SGNagareGetAudioProcessor());
     s_trackWatcher = [[SGNagareTrackWatcher alloc] init];
     SGAddPlayerStateObserver(s_trackWatcher);

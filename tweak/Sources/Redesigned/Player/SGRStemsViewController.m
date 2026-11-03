@@ -3,11 +3,18 @@
 #import "Redesigned/Kit/SGRKit.h"
 #import "Shared/Nagare/SGNagareBridge.h"
 #import "Shared/Nagare/SCNetModelManager.h"
+#import "Shared/Nagare/SGSpleeterModelManager.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <math.h>
 
 static const CGFloat kPadding = 18.0;
 
-@interface SGRStemsViewController () <UIScrollViewDelegate>
+@interface SGRStemsViewController () <UIScrollViewDelegate, UIDocumentPickerDelegate>
+@property (nonatomic, strong) UILabel *modelDetailLabel;
+@property (nonatomic, strong) UIButton *importModelButton;
+@property (nonatomic, strong) UIButton *downloadURLButton;
+@property (nonatomic, strong) UIButton *reloadEngineButton;
+@property (nonatomic, strong) UIButton *deleteModelButton;
 @property (nonatomic, strong) UIVisualEffectView *blurView;
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIStackView *contentStack;
@@ -115,7 +122,7 @@ static const CGFloat kPadding = 18.0;
     [self refreshControlsState];
 
     __weak __typeof__(self) weakSelf = self;
-    self.modelStatusObserver = [NSNotificationCenter.defaultCenter addObserverForName:SCNetModelStatusDidChangeNotification
+    self.modelStatusObserver = [NSNotificationCenter.defaultCenter addObserverForName:SGSpleeterModelStatusDidChangeNotification
                                                                               object:nil
                                                                                queue:NSOperationQueue.mainQueue
                                                                           usingBlock:^(NSNotification * _Nonnull note) {
@@ -223,7 +230,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 
     UILabel *subtitleLabel = [[UILabel alloc] init];
     subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    subtitleLabel.text = @"Real-Time Nagare SIMD Audio Engine";
+    subtitleLabel.text = @"Spleeter 4-Stem Neural Audio Engine";
     subtitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
     subtitleLabel.textColor = SGRSecondary();
     [header addSubview:subtitleLabel];
@@ -392,6 +399,98 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
         [self.modelDownloadProgress.heightAnchor constraintEqualToConstant:3],
     ]];
     [stack addArrangedSubview:card];
+
+    // Neural Model Runtime & Management Card
+    UILabel *modelHeader = [self createSectionHeader:@"Neural Model Runtime & Management"];
+    modelHeader.translatesAutoresizingMaskIntoConstraints = NO;
+    [stack addArrangedSubview:modelHeader];
+
+    UIView *modelCard = [self createCardView];
+
+    UIImageView *cpuIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"cpu.fill"]];
+    cpuIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    cpuIcon.tintColor = SGRAccent();
+    cpuIcon.contentMode = UIViewContentModeScaleAspectFit;
+
+    UILabel *modelTitle = [[UILabel alloc] init];
+    modelTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    modelTitle.text = @"Spleeter 4-Stem (Apple Neural Engine)";
+    modelTitle.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    modelTitle.textColor = SGRPrimary();
+
+    self.modelDetailLabel = [[UILabel alloc] init];
+    self.modelDetailLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.modelDetailLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+    self.modelDetailLabel.textColor = SGRSecondary();
+    self.modelDetailLabel.numberOfLines = 2;
+
+    UIStackView *modelTextStack = [[UIStackView alloc] initWithArrangedSubviews:@[modelTitle, self.modelDetailLabel]];
+    modelTextStack.translatesAutoresizingMaskIntoConstraints = NO;
+    modelTextStack.axis = UILayoutConstraintAxisVertical;
+    modelTextStack.spacing = 3.0;
+
+    UIStackView *modelHeaderRow = [[UIStackView alloc] initWithArrangedSubviews:@[cpuIcon, modelTextStack]];
+    modelHeaderRow.translatesAutoresizingMaskIntoConstraints = NO;
+    modelHeaderRow.axis = UILayoutConstraintAxisHorizontal;
+    modelHeaderRow.spacing = 10.0;
+    modelHeaderRow.alignment = UIStackViewAlignmentCenter;
+    [modelCard addSubview:modelHeaderRow];
+
+    self.importModelButton = [self createActionButtonWithTitle:@"Import from Files"
+                                                          icon:@"folder.badge.plus"
+                                                        action:@selector(importModelTapped)
+                                                   destructive:NO];
+
+    self.downloadURLButton = [self createActionButtonWithTitle:@"Download via URL"
+                                                          icon:@"arrow.down.circle"
+                                                        action:@selector(downloadFromURLTapped)
+                                                   destructive:NO];
+
+    self.reloadEngineButton = [self createActionButtonWithTitle:@"Reload Runtime"
+                                                           icon:@"arrow.clockwise.circle"
+                                                         action:@selector(reloadEngineTapped)
+                                                    destructive:NO];
+
+    self.deleteModelButton = [self createActionButtonWithTitle:@"Delete Model"
+                                                          icon:@"trash"
+                                                        action:@selector(deleteModelTapped)
+                                                   destructive:YES];
+
+    UIStackView *btnRow1 = [[UIStackView alloc] initWithArrangedSubviews:@[self.importModelButton, self.downloadURLButton]];
+    btnRow1.translatesAutoresizingMaskIntoConstraints = NO;
+    btnRow1.axis = UILayoutConstraintAxisHorizontal;
+    btnRow1.spacing = 8.0;
+    btnRow1.distribution = UIStackViewDistributionFillEqually;
+    [modelCard addSubview:btnRow1];
+
+    UIStackView *btnRow2 = [[UIStackView alloc] initWithArrangedSubviews:@[self.reloadEngineButton, self.deleteModelButton]];
+    btnRow2.translatesAutoresizingMaskIntoConstraints = NO;
+    btnRow2.axis = UILayoutConstraintAxisHorizontal;
+    btnRow2.spacing = 8.0;
+    btnRow2.distribution = UIStackViewDistributionFillEqually;
+    [modelCard addSubview:btnRow2];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [cpuIcon.widthAnchor constraintEqualToConstant:24],
+        [cpuIcon.heightAnchor constraintEqualToConstant:24],
+
+        [modelHeaderRow.leadingAnchor constraintEqualToAnchor:modelCard.leadingAnchor constant:14],
+        [modelHeaderRow.trailingAnchor constraintEqualToAnchor:modelCard.trailingAnchor constant:-14],
+        [modelHeaderRow.topAnchor constraintEqualToAnchor:modelCard.topAnchor constant:12],
+
+        [btnRow1.leadingAnchor constraintEqualToAnchor:modelCard.leadingAnchor constant:14],
+        [btnRow1.trailingAnchor constraintEqualToAnchor:modelCard.trailingAnchor constant:-14],
+        [btnRow1.topAnchor constraintEqualToAnchor:modelHeaderRow.bottomAnchor constant:12],
+        [btnRow1.heightAnchor constraintEqualToConstant:36],
+
+        [btnRow2.leadingAnchor constraintEqualToAnchor:modelCard.leadingAnchor constant:14],
+        [btnRow2.trailingAnchor constraintEqualToAnchor:modelCard.trailingAnchor constant:-14],
+        [btnRow2.topAnchor constraintEqualToAnchor:btnRow1.bottomAnchor constant:8],
+        [btnRow2.heightAnchor constraintEqualToConstant:36],
+        [btnRow2.bottomAnchor constraintEqualToAnchor:modelCard.bottomAnchor constant:-12],
+    ]];
+
+    [stack addArrangedSubview:modelCard];
 
     // Presets Mode Picker
     UILabel *modesHeader = [self createSectionHeader:@"Separation Mode"];
@@ -820,6 +919,39 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 
 #pragma mark - Helper Views
 
+- (UIButton *)createActionButtonWithTitle:(NSString *)title icon:(NSString *)systemIcon action:(SEL)action destructive:(BOOL)destructive {
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+    btn.translatesAutoresizingMaskIntoConstraints = NO;
+    btn.backgroundColor = [UIColor colorWithWhite:1.0 alpha:destructive ? 0.08 : 0.12];
+    btn.layer.cornerRadius = 10.0;
+    btn.layer.cornerCurve = kCACornerCurveContinuous;
+    btn.clipsToBounds = YES;
+    btn.tintColor = destructive ? [UIColor systemRedColor] : SGRPrimary();
+
+    if (@available(iOS 15.0, *)) {
+        UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
+        config.image = [UIImage systemImageNamed:systemIcon];
+        config.imagePadding = 6.0;
+        config.imagePlacement = NSDirectionalRectEdgeLeading;
+        config.baseForegroundColor = destructive ? [UIColor systemRedColor] : SGRPrimary();
+
+        NSMutableAttributedString *titleAttr = [[NSMutableAttributedString alloc] initWithString:title attributes:@{
+            NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightMedium]
+        }];
+        config.attributedTitle = titleAttr;
+        config.contentInsets = NSDirectionalEdgeInsetsMake(6, 8, 6, 8);
+        btn.configuration = config;
+    } else {
+        [btn setTitle:title forState:UIControlStateNormal];
+        [btn setImage:[UIImage systemImageNamed:systemIcon] forState:UIControlStateNormal];
+        btn.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+        btn.imageEdgeInsets = UIEdgeInsetsMake(0, -4, 0, 4);
+    }
+
+    [btn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+    return btn;
+}
+
 - (UIView *)createCardView {
     UIView *card = [[UIView alloc] init];
     card.translatesAutoresizingMaskIntoConstraints = NO;
@@ -862,14 +994,67 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 #pragma mark - State Refresh
 
 - (void)updateModelStatusUI {
-    if (SGNagareIsStemsEnabled()) {
-        self.modelStatusLabel.text = @"● Real-Time SIMD DSP Active (0 ms Latency)";
-        self.modelStatusLabel.textColor = SGRAccent();
+    SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
+    NSString *sizeStr = [mgr installedModelSizeString];
+
+    if (mgr.isModelReady) {
+        if (SGNagareIsStemsEnabled()) {
+            self.modelStatusLabel.text = sizeStr ? [NSString stringWithFormat:@"● Spleeter Neural Active (%@)", sizeStr] : @"● Spleeter Neural Active";
+            self.modelStatusLabel.textColor = SGRAccent();
+        } else {
+            self.modelStatusLabel.text = sizeStr ? [NSString stringWithFormat:@"● Spleeter Ready (%@)", sizeStr] : @"● Spleeter Ready";
+            self.modelStatusLabel.textColor = SGRAccent();
+        }
+        self.modelDetailLabel.text = @"Engine: Apple Neural Engine (ANE) / GPU";
+        self.modelDetailLabel.textColor = SGRSecondary();
+        self.modelDownloadProgress.hidden = YES;
+        self.deleteModelButton.alpha = 1.0f;
+        self.deleteModelButton.enabled = YES;
+        self.reloadEngineButton.alpha = 1.0f;
+        self.reloadEngineButton.enabled = YES;
+    } else if (mgr.state == SGSpleeterModelStateDownloading) {
+        self.modelStatusLabel.text = mgr.statusMessage ?: @"Downloading Spleeter Model...";
+        self.modelStatusLabel.textColor = [UIColor systemOrangeColor];
+        self.modelDetailLabel.text = [NSString stringWithFormat:@"Source: %@", mgr.downloadURLString];
+        self.modelDetailLabel.textColor = SGRTertiary();
+        self.modelDownloadProgress.hidden = NO;
+        self.modelDownloadProgress.progress = mgr.downloadProgress;
+        self.deleteModelButton.alpha = 0.4f;
+        self.deleteModelButton.enabled = NO;
+        self.reloadEngineButton.alpha = 0.4f;
+        self.reloadEngineButton.enabled = NO;
+    } else if (mgr.state == SGSpleeterModelStateExtracting) {
+        self.modelStatusLabel.text = mgr.statusMessage ?: @"Extracting Spleeter Model...";
+        self.modelStatusLabel.textColor = [UIColor systemOrangeColor];
+        self.modelDetailLabel.text = @"Unpacking neural weights into local storage...";
+        self.modelDetailLabel.textColor = SGRTertiary();
+        self.modelDownloadProgress.hidden = NO;
+        self.modelDownloadProgress.progress = 0.9f;
+        self.deleteModelButton.alpha = 0.4f;
+        self.deleteModelButton.enabled = NO;
+        self.reloadEngineButton.alpha = 0.4f;
+        self.reloadEngineButton.enabled = NO;
+    } else if (mgr.state == SGSpleeterModelStateFailed) {
+        self.modelStatusLabel.text = @"Model failed or missing";
+        self.modelStatusLabel.textColor = [UIColor systemRedColor];
+        self.modelDetailLabel.text = mgr.statusMessage ?: @"Tap Import from Files or Download to install.";
+        self.modelDetailLabel.textColor = [UIColor systemRedColor];
+        self.modelDownloadProgress.hidden = YES;
+        self.deleteModelButton.alpha = 0.4f;
+        self.deleteModelButton.enabled = NO;
+        self.reloadEngineButton.alpha = 0.4f;
+        self.reloadEngineButton.enabled = NO;
     } else {
-        self.modelStatusLabel.text = @"4-Stem Real-Time Spectral Separation";
+        self.modelStatusLabel.text = @"Spleeter Model Not Installed";
         self.modelStatusLabel.textColor = SGRSecondary();
+        self.modelDetailLabel.text = @"Import .zip/.mlmodelc from Files or download via URL.";
+        self.modelDetailLabel.textColor = SGRTertiary();
+        self.modelDownloadProgress.hidden = YES;
+        self.deleteModelButton.alpha = 0.4f;
+        self.deleteModelButton.enabled = NO;
+        self.reloadEngineButton.alpha = 0.4f;
+        self.reloadEngineButton.enabled = NO;
     }
-    self.modelDownloadProgress.hidden = YES;
 }
 
 - (void)refreshControlsState {
@@ -906,7 +1091,151 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 
 #pragma mark - Actions
 
+- (void)importModelTapped {
+    NSArray *types;
+    if (@available(iOS 14.0, *)) {
+        types = @[UTTypeZip, UTTypeFolder];
+    } else {
+        types = @[@"public.zip-archive", @"public.folder", @"com.pkware.zip-archive", @"public.item"];
+    }
+
+    UIDocumentPickerViewController *picker;
+    if (@available(iOS 14.0, *)) {
+        picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types asCopy:YES];
+    } else {
+        picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:types inMode:UIDocumentPickerModeImport];
+    }
+    picker.delegate = self;
+    picker.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    picker.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)downloadFromURLTapped {
+    SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Download Spleeter Model"
+                                                                   message:@"Enter a direct download URL for Spleeter4Model.mlmodelc.zip, or use the default release mirror."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    alert.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+
+    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.text = mgr.downloadURLString;
+        textField.placeholder = @"https://...";
+        textField.keyboardType = UIKeyboardTypeURL;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+
+    __weak __typeof__(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Download" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        __strong __typeof__(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        NSString *urlText = alert.textFields.firstObject.text;
+        urlText = [urlText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (urlText.length > 0) {
+            [mgr startDownloadFromURLString:urlText];
+            [strongSelf updateModelStatusUI];
+        }
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)reloadEngineTapped {
+    SGNagareReloadSpleeter();
+    [self updateModelStatusUI];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Runtime Reloaded"
+                                                                   message:@"Neural audio separation worker reinitialized with current model weights."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    alert.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)deleteModelTapped {
+    SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
+    if (!mgr.isModelReady) return;
+
+    NSString *sizeStr = [mgr installedModelSizeString] ?: @"78.8 MB";
+    NSString *msg = [NSString stringWithFormat:@"Delete installed Spleeter model files? (%@ will be freed from storage)", sizeStr];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Delete Model"
+                                                                   message:msg
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    alert.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+
+    __weak __typeof__(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Delete Model" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        __strong __typeof__(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        NSError *err = nil;
+        [mgr deleteInstalledModel:&err];
+        SGNagareSetStemsEnabled(NO);
+        strongSelf.stemsMasterSwitch.on = NO;
+        [strongSelf refreshControlsState];
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (alert.popoverPresentationController) {
+        alert.popoverPresentationController.sourceView = self.deleteModelButton ?: self.view;
+        alert.popoverPresentationController.sourceRect = self.deleteModelButton ? self.deleteModelButton.bounds : CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+    }
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+#pragma mark - UIDocumentPickerDelegate
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    NSURL *selectedURL = urls.firstObject;
+    if (!selectedURL) return;
+
+    self.modelStatusLabel.text = @"Importing model from Files...";
+    self.modelStatusLabel.textColor = [UIColor systemOrangeColor];
+    self.modelDownloadProgress.hidden = NO;
+    self.modelDownloadProgress.progress = 0.5f;
+
+    __weak __typeof__(self) weakSelf = self;
+    [[SGSpleeterModelManager sharedManager] importModelFromURL:selectedURL completion:^(BOOL success, NSString * _Nullable errorMessage) {
+        __strong __typeof__(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        if (success) {
+            SGNagareReloadSpleeter();
+            [strongSelf refreshControlsState];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Model Imported"
+                                                                           message:@"Spleeter 4-Stem model was successfully imported and activated on Apple Neural Engine."
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            alert.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+        } else {
+            [strongSelf refreshControlsState];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Import Failed"
+                                                                           message:errorMessage ?: @"Could not validate Spleeter model files."
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+            alert.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+        }
+    }];
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+    [self updateModelStatusUI];
+}
+
 - (void)stemsMasterToggled:(UISwitch *)sender {
+    if (sender.isOn) {
+        SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
+        if (!mgr.isModelReady) {
+            [mgr startDownloadIfNeeded];
+        }
+    }
     SGNagareSetStemsEnabled(sender.isOn);
     [self updateModelStatusUI];
 }

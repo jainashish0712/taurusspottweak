@@ -25,7 +25,9 @@ const SGAudioProcessor *SGNagareGetAudioProcessor(void);
 // ============================================================================
 void SGNagareSetStemsEnabled(BOOL enabled);
 BOOL SGNagareIsStemsEnabled(void);
+BOOL SGNagareIsSpleeterReady(void);
 BOOL SGNagareIsSCNetReady(void);
+void SGNagareReloadSpleeter(void);
 
 // Stem levels are linear multipliers [0.0, 2.0], where 1.0 = original volume
 void SGNagareSetStemLevels(float vocals, float drums, float bass, float other);

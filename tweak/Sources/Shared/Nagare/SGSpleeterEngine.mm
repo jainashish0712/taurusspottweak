@@ -1,0 +1,286 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Copyright (C) 2026 Raka-Saka
+//
+// Spleeter Real-Time Engine Implementation
+
+#import "SGSpleeterEngine.h"
+#import "SGSpleeterModelManager.h"
+#include <atomic>
+#include <cmath>
+#include <cstring>
+#include <vector>
+#include <algorithm>
+
+extern "C" {
+int32_t SGSpleeterWorkerStart(const char *modelPath, void (*callback)(const float*, const float*, const float*, const float*, int32_t));
+void SGSpleeterWorkerStop(void);
+void SGSpleeterWorkerReset(void);
+int32_t SGSpleeterWorkerIsReady(void);
+void SGSpleeterWorkerPushAudio(const float *left, const float *right, int32_t frames);
+}
+
+// Circular ring buffer capacity: ~11.8 seconds of stereo audio (2^19 frames)
+static constexpr uint32_t kRingCapacity = 524288;
+static constexpr uint32_t kRingMask = kRingCapacity - 1;
+
+struct SGSpleeterRingBuffer {
+    std::vector<float> drums;   // interleaved stereo [L, R, ...]
+    std::vector<float> bass;
+    std::vector<float> other;
+    std::vector<float> vocals;
+    std::atomic<uint32_t> writeHead{0};
+    std::atomic<uint32_t> readHead{0};
+
+    void init() {
+        drums.assign(kRingCapacity * 2, 0.0f);
+        bass.assign(kRingCapacity * 2, 0.0f);
+        other.assign(kRingCapacity * 2, 0.0f);
+        vocals.assign(kRingCapacity * 2, 0.0f);
+        writeHead.store(0, std::memory_order_relaxed);
+        readHead.store(0, std::memory_order_relaxed);
+    }
+
+    void clear() {
+        writeHead.store(0, std::memory_order_relaxed);
+        readHead.store(0, std::memory_order_relaxed);
+    }
+
+    uint32_t availableToRead() const {
+        uint32_t w = writeHead.load(std::memory_order_acquire);
+        uint32_t r = readHead.load(std::memory_order_relaxed);
+        return (w >= r) ? (w - r) : (kRingCapacity - (r - w));
+    }
+};
+
+static SGSpleeterRingBuffer g_ring;
+static std::atomic<bool> g_enabled{false};
+static std::atomic<bool> g_workerActive{false};
+static int g_sampleRate = 44100;
+
+// Target stem gains
+static std::atomic<float> g_targetVocals{1.0f};
+static std::atomic<float> g_targetDrums{1.0f};
+static std::atomic<float> g_targetBass{1.0f};
+static std::atomic<float> g_targetOther{1.0f};
+
+// Smoothed faders (render thread only)
+static float s_smoothVocals = 1.0f;
+static float s_smoothDrums = 1.0f;
+static float s_smoothBass = 1.0f;
+static float s_smoothOther = 1.0f;
+
+// RMS meter envelopes
+static std::atomic<float> g_meterVocals{0.0f};
+static std::atomic<float> g_meterDrums{0.0f};
+static std::atomic<float> g_meterBass{0.0f};
+static std::atomic<float> g_meterOther{0.0f};
+
+static id s_modelObserver = nil;
+
+static void spleeter_write_callback(const float *d, const float *b, const float *o, const float *v, int32_t frames) {
+    if (!d || !b || !o || !v || frames <= 0) return;
+
+    uint32_t w = g_ring.writeHead.load(std::memory_order_relaxed);
+    for (int i = 0; i < frames; i++) {
+        uint32_t idx = (w + (uint32_t)i) & kRingMask;
+        g_ring.drums[idx * 2] = d[i * 2];
+        g_ring.drums[idx * 2 + 1] = d[i * 2 + 1];
+
+        g_ring.bass[idx * 2] = b[i * 2];
+        g_ring.bass[idx * 2 + 1] = b[i * 2 + 1];
+
+        g_ring.other[idx * 2] = o[i * 2];
+        g_ring.other[idx * 2 + 1] = o[i * 2 + 1];
+
+        g_ring.vocals[idx * 2] = v[i * 2];
+        g_ring.vocals[idx * 2 + 1] = v[i * 2 + 1];
+    }
+    g_ring.writeHead.store((w + (uint32_t)frames) & kRingMask, std::memory_order_release);
+}
+
+static void try_start_worker() {
+    SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
+    if (!mgr.isModelReady) {
+        [mgr startDownloadIfNeeded];
+        return;
+    }
+
+    NSURL *url = mgr.modelURL;
+    if (!url) return;
+
+    if (!g_workerActive.load(std::memory_order_relaxed)) {
+        if (SGSpleeterWorkerStart([url.path UTF8String], spleeter_write_callback)) {
+            g_workerActive.store(true, std::memory_order_relaxed);
+        }
+    }
+}
+
+int spleeter_engine_init(int sample_rate) {
+    g_sampleRate = sample_rate > 0 ? sample_rate : 44100;
+    g_ring.init();
+
+    if (!s_modelObserver) {
+        s_modelObserver = [NSNotificationCenter.defaultCenter addObserverForName:SGSpleeterModelStatusDidChangeNotification
+                                                                          object:nil
+                                                                           queue:nil
+                                                                      usingBlock:^(NSNotification * _Nonnull note) {
+            SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
+            if (mgr.isModelReady) {
+                try_start_worker();
+            }
+        }];
+    }
+
+    try_start_worker();
+    return 1;
+}
+
+void spleeter_engine_release(void) {
+    if (s_modelObserver) {
+        [NSNotificationCenter.defaultCenter removeObserver:s_modelObserver];
+        s_modelObserver = nil;
+    }
+    SGSpleeterWorkerStop();
+    g_workerActive.store(false, std::memory_order_relaxed);
+    g_ring.clear();
+}
+
+void spleeter_engine_set_enabled(bool enabled) {
+    g_enabled.store(enabled, std::memory_order_release);
+    if (enabled) {
+        try_start_worker();
+    } else {
+        spleeter_engine_clear();
+    }
+}
+
+bool spleeter_engine_is_enabled(void) {
+    return g_enabled.load(std::memory_order_relaxed);
+}
+
+bool spleeter_engine_is_ready(void) {
+    return g_workerActive.load(std::memory_order_relaxed) && SGSpleeterWorkerIsReady();
+}
+
+void spleeter_engine_set_stem_levels(float vocals, float drums, float bass, float other) {
+    g_targetVocals.store(std::max(0.0f, std::min(2.0f, vocals)), std::memory_order_relaxed);
+    g_targetDrums.store(std::max(0.0f, std::min(2.0f, drums)), std::memory_order_relaxed);
+    g_targetBass.store(std::max(0.0f, std::min(2.0f, bass)), std::memory_order_relaxed);
+    g_targetOther.store(std::max(0.0f, std::min(2.0f, other)), std::memory_order_relaxed);
+}
+
+void spleeter_engine_get_stem_levels(float* vocals, float* drums, float* bass, float* other) {
+    if (vocals) *vocals = g_targetVocals.load(std::memory_order_relaxed);
+    if (drums) *drums = g_targetDrums.load(std::memory_order_relaxed);
+    if (bass) *bass = g_targetBass.load(std::memory_order_relaxed);
+    if (other) *other = g_targetOther.load(std::memory_order_relaxed);
+}
+
+void spleeter_engine_get_stem_meters(float* vocals, float* drums, float* bass, float* other) {
+    if (vocals) *vocals = g_meterVocals.load(std::memory_order_relaxed);
+    if (drums) *drums = g_meterDrums.load(std::memory_order_relaxed);
+    if (bass) *bass = g_meterBass.load(std::memory_order_relaxed);
+    if (other) *other = g_meterOther.load(std::memory_order_relaxed);
+}
+
+void spleeter_engine_clear(void) {
+    SGSpleeterWorkerReset();
+    g_ring.clear();
+    g_meterVocals.store(0.0f, std::memory_order_relaxed);
+    g_meterDrums.store(0.0f, std::memory_order_relaxed);
+    g_meterBass.store(0.0f, std::memory_order_relaxed);
+    g_meterOther.store(0.0f, std::memory_order_relaxed);
+}
+
+void spleeter_engine_reload(void) {
+    SGSpleeterWorkerStop();
+    g_workerActive.store(false, std::memory_order_relaxed);
+    spleeter_engine_clear();
+    try_start_worker();
+}
+
+void spleeter_engine_process(float* left, float* right, int num_frames) {
+    if (!left || !right || num_frames <= 0) return;
+    if (!g_enabled.load(std::memory_order_relaxed)) return;
+
+    // Feed real-time input PCM into Spleeter worker lookahead queue
+    if (g_workerActive.load(std::memory_order_relaxed)) {
+        SGSpleeterWorkerPushAudio(left, right, num_frames);
+    }
+
+    uint32_t available = g_ring.availableToRead();
+    if (available < (uint32_t)num_frames) {
+        // Lookahead buffering in progress: pass through original audio cleanly
+        return;
+    }
+
+    uint32_t r = g_ring.readHead.load(std::memory_order_relaxed);
+
+    float tVocals = g_targetVocals.load(std::memory_order_relaxed);
+    float tDrums  = g_targetDrums.load(std::memory_order_relaxed);
+    float tBass   = g_targetBass.load(std::memory_order_relaxed);
+    float tOther  = g_targetOther.load(std::memory_order_relaxed);
+
+    // Exponential smoothing constant (~30ms time constant at 44.1kHz)
+    constexpr float kAlpha = 0.005f;
+
+    float sumSqV = 0.0f, sumSqD = 0.0f, sumSqB = 0.0f, sumSqO = 0.0f;
+
+    for (int i = 0; i < num_frames; i++) {
+        // Smooth gains per sample for click-free adjustment
+        s_smoothVocals += (tVocals - s_smoothVocals) * kAlpha;
+        s_smoothDrums  += (tDrums  - s_smoothDrums)  * kAlpha;
+        s_smoothBass   += (tBass   - s_smoothBass)   * kAlpha;
+        s_smoothOther  += (tOther  - s_smoothOther)  * kAlpha;
+
+        uint32_t idx = (r + (uint32_t)i) & kRingMask;
+
+        float vL = g_ring.vocals[idx * 2],     vR = g_ring.vocals[idx * 2 + 1];
+        float dL = g_ring.drums[idx * 2],      dR = g_ring.drums[idx * 2 + 1];
+        float bL = g_ring.bass[idx * 2],       bR = g_ring.bass[idx * 2 + 1];
+        float oL = g_ring.other[idx * 2],      oR = g_ring.other[idx * 2 + 1];
+
+        // Track meter energies
+        sumSqV += vL * vL + vR * vR;
+        sumSqD += dL * dL + dR * dR;
+        sumSqB += bL * bL + bR * bR;
+        sumSqO += oL * oL + oR * oR;
+
+        // Sum 4 weighted stems
+        float outL = s_smoothVocals * vL + s_smoothDrums * dL + s_smoothBass * bL + s_smoothOther * oL;
+        float outR = s_smoothVocals * vR + s_smoothDrums * dR + s_smoothBass * bR + s_smoothOther * oR;
+
+        // Soft-knee safety limiter & NaN sanitization
+        if (std::isnan(outL) || std::isinf(outL)) outL = 0.0f;
+        else if (outL > 0.95f) outL = 0.95f + 0.05f * std::tanh((outL - 0.95f) * 20.0f);
+        else if (outL < -0.95f) outL = -0.95f + 0.05f * std::tanh((outL + 0.95f) * 20.0f);
+
+        if (std::isnan(outR) || std::isinf(outR)) outR = 0.0f;
+        else if (outR > 0.95f) outR = 0.95f + 0.05f * std::tanh((outR - 0.95f) * 20.0f);
+        else if (outR < -0.95f) outR = -0.95f + 0.05f * std::tanh((outR + 0.95f) * 20.0f);
+
+        left[i] = std::max(-1.0f, std::min(1.0f, outL));
+        right[i] = std::max(-1.0f, std::min(1.0f, outR));
+    }
+
+    g_ring.readHead.store((r + (uint32_t)num_frames) & kRingMask, std::memory_order_release);
+
+    // Compute and update meter levels with smooth decay
+    float invCount = 1.0f / (float)(num_frames * 2);
+    float curV = std::sqrt(sumSqV * invCount);
+    float curD = std::sqrt(sumSqD * invCount);
+    float curB = std::sqrt(sumSqB * invCount);
+    float curO = std::sqrt(sumSqO * invCount);
+
+    constexpr float kMeterDecay = 0.85f;
+    float prevV = g_meterVocals.load(std::memory_order_relaxed);
+    float prevD = g_meterDrums.load(std::memory_order_relaxed);
+    float prevB = g_meterBass.load(std::memory_order_relaxed);
+    float prevO = g_meterOther.load(std::memory_order_relaxed);
+
+    g_meterVocals.store(std::max(curV, prevV * kMeterDecay), std::memory_order_relaxed);
+    g_meterDrums.store(std::max(curD, prevD * kMeterDecay), std::memory_order_relaxed);
+    g_meterBass.store(std::max(curB, prevB * kMeterDecay), std::memory_order_relaxed);
+    g_meterOther.store(std::max(curO, prevO * kMeterDecay), std::memory_order_relaxed);
+}
