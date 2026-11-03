@@ -6,11 +6,9 @@
 #import "audio_upscaler.h"
 #import "dynamic_restorer.h"
 
-extern "C" {
 #import "Core/SGPrefs.h"
 #import "Core/SGLog.h"
 #import "Shared/Audio/SGAudioPipeline.h"
-}
 #include <atomic>
 #include <cmath>
 #include <algorithm>
