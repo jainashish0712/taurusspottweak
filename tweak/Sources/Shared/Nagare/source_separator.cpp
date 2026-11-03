@@ -354,49 +354,55 @@ static void apply_custom_mix(SeparatorState& s) {
     int half = FFT_SIZE / 2;
 
     for (int i = 0; i < half; i++) {
-        float mid_gain = 1.0f;
-        float side_gain = 1.0f;
-
-        // Bass region (< ~215 Hz)
-        if (i < BASS_CUTOFF_BIN) {
-            mid_gain = s.bass_level;
-            side_gain = s.bass_level;
-        }
-        // Vocal region (center-panned, ~322 Hz to 8.6 kHz)
-        else if (i >= VOCAL_LOW_BIN && i <= VOCAL_HIGH_BIN) {
-            float mid_mag = get_magnitude(s.mid_real[i], s.mid_imag[i]);
-            float side_mag = get_magnitude(s.side_real[i], s.side_imag[i]);
-            float total = mid_mag + side_mag + 0.0001f;
-            float center_ratio = mid_mag / total; // ~1.0 for center vocal
-
-            mid_gain = center_ratio * s.vocal_level + (1.0f - center_ratio) * s.other_level;
-            side_gain = s.other_level;
-        }
-        // Other (high frequency > 8.6kHz)
-        else {
-            mid_gain = s.other_level;
-            side_gain = s.other_level;
+        // 1. Bass crossover: smooth cosine transition between bin 6 (~130 Hz) and bin 12 (~260 Hz)
+        float bass_weight = 0.0f;
+        if (i <= 6) {
+            bass_weight = 1.0f;
+        } else if (i < 12) {
+            float t = (float)(i - 6) / 6.0f;
+            bass_weight = 0.5f * (1.0f + cosf(PI * t));
         }
 
-        // Spectral flux transient detection for drums/percussive stem
+        // 2. Vocal vs Other separation in mid/high frequencies
+        float mid_mag = get_magnitude(s.mid_real[i], s.mid_imag[i]);
+        float side_mag = get_magnitude(s.side_real[i], s.side_imag[i]);
+        float total = mid_mag + side_mag + 1e-6f;
+        float center_ratio = mid_mag / total; // 0.0 (wide stereo) to 1.0 (exact center)
+
+        // Cubic power-mask for vocal isolation (eliminates instrument bleed into vocal stem)
+        float vocal_mask = 0.0f;
+        if (i >= 12 && i <= 380) { // ~260 Hz to ~8.2 kHz
+            vocal_mask = powf(center_ratio, 3.0f);
+        }
+
+        // Base gains for Mid and Side channels
+        float mid_base_gain = vocal_mask * s.vocal_level + (1.0f - vocal_mask) * s.other_level;
+        float side_base_gain = s.other_level;
+
+        // Blend with bass stem
+        float mid_combined = bass_weight * s.bass_level + (1.0f - bass_weight) * mid_base_gain;
+        float side_combined = bass_weight * s.bass_level + (1.0f - bass_weight) * side_base_gain;
+
+        // 3. Drums/Percussive transient detection via multi-band spectral flux
         float mag_l = get_magnitude(s.fft_real_l[i], s.fft_imag_l[i]);
         float mag_r = get_magnitude(s.fft_real_r[i], s.fft_imag_r[i]);
         float avg_mag = 0.5f * (mag_l + mag_r);
         float prev_mag = 0.5f * (s.prev_mag_l[i] + s.prev_mag_r[i]);
         float flux = std::max(0.0f, avg_mag - prev_mag);
-        float transient = std::min(1.0f, flux / (prev_mag + 0.1f));
+        float transient = std::min(1.0f, flux / (prev_mag + 0.05f));
 
-        float eff_mid = (1.0f - transient) * mid_gain + transient * s.drums_level;
-        float eff_side = (1.0f - transient) * side_gain + transient * s.drums_level;
+        // Effective gains for Mid and Side
+        float eff_mid = (1.0f - transient) * mid_combined + transient * s.drums_level;
+        float eff_side = (1.0f - transient) * side_combined + transient * s.drums_level;
 
         s.mid_real[i] *= eff_mid;
         s.mid_imag[i] *= eff_mid;
         s.side_real[i] *= eff_side;
         s.side_imag[i] *= eff_side;
 
-        // Update previous frame magnitude for HPSS transient detection
-        s.prev_mag_l[i] = mag_l;
-        s.prev_mag_r[i] = mag_r;
+        // Exponential decay smoothing for percussive envelope follower
+        s.prev_mag_l[i] = 0.6f * s.prev_mag_l[i] + 0.4f * mag_l;
+        s.prev_mag_r[i] = 0.6f * s.prev_mag_r[i] + 0.4f * mag_r;
     }
 
     // Mirror
@@ -417,11 +423,13 @@ static void update_meters(SeparatorState& s) {
         float mid_mag = get_magnitude(s.mid_real[i], s.mid_imag[i]);
         float side_mag = get_magnitude(s.side_real[i], s.side_imag[i]);
 
-        if (i < BASS_CUTOFF_BIN) {
+        if (i < 12) {
             bass += mid_mag + side_mag;
-        } else if (i >= VOCAL_LOW_BIN && i <= VOCAL_HIGH_BIN) {
-            vocals += mid_mag;
-            other += side_mag;
+        } else if (i >= 12 && i <= 380) {
+            float total = mid_mag + side_mag + 1e-6f;
+            float v_mask = powf(mid_mag / total, 3.0f);
+            vocals += mid_mag * v_mask;
+            other += side_mag + mid_mag * (1.0f - v_mask);
         } else {
             other += mid_mag + side_mag;
         }
@@ -431,12 +439,12 @@ static void update_meters(SeparatorState& s) {
         drums += flux_l;
     }
 
-    // Normalize and smooth
-    float norm = 1.0f / half;
-    s.meter_vocals = s.meter_vocals * 0.9f + vocals * norm * 0.1f;
-    s.meter_bass = s.meter_bass * 0.9f + bass * norm * 0.1f;
-    s.meter_drums = s.meter_drums * 0.9f + drums * norm * 2.0f * 0.1f;
-    s.meter_other = s.meter_other * 0.9f + other * norm * 0.1f;
+    // Normalize and smooth (approx 0.0 - 1.0 scale)
+    float norm = 1.0f / (half * 0.1f + 1e-5f);
+    s.meter_vocals = s.meter_vocals * 0.85f + std::min(1.0f, vocals * norm * 0.4f) * 0.15f;
+    s.meter_bass = s.meter_bass * 0.85f + std::min(1.0f, bass * (1.0f / 12.0f) * 0.3f) * 0.15f;
+    s.meter_drums = s.meter_drums * 0.85f + std::min(1.0f, drums * norm * 1.5f) * 0.15f;
+    s.meter_other = s.meter_other * 0.85f + std::min(1.0f, other * norm * 0.3f) * 0.15f;
 }
 
 // ============================================================================

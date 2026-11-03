@@ -482,9 +482,9 @@ OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const
             memset(right, 0, frames * sizeof(float));
         }
 
-        // 1. 4-Stem Source Separation (SCNet Neural Model)
+        // 1. 4-Stem Source Separation (Real-Time SIMD DSP Engine)
         if (stems) {
-            scnet_engine_process(left, right, frames);
+            separator_process(left, right, frames);
         }
 
         // 2. Audio Upscaler (SBR / DSEE)
@@ -519,6 +519,14 @@ OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const
             hrtf_process(left, right, frames);
         }
 
+        // Hard brickwall safety limiter & NaN/Inf protection (prevents any DAC overload)
+        for (UInt32 i = 0; i < frames; i++) {
+            if (std::isnan(left[i]) || std::isinf(left[i])) left[i] = 0.0f;
+            else left[i] = std::max(-1.0f, std::min(1.0f, left[i]));
+            if (std::isnan(right[i]) || std::isinf(right[i])) right[i] = 0.0f;
+            else right[i] = std::max(-1.0f, std::min(1.0f, right[i]));
+        }
+
         *flags &= ~kAudioUnitRenderAction_OutputIsSilence;
         return noErr;
     }
@@ -537,7 +545,7 @@ OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const
         }
 
         if (stems) {
-            scnet_engine_process(s_scratchLeft, s_scratchRight, count);
+            separator_process(s_scratchLeft, s_scratchRight, count);
         }
         if (upscaler) {
             upscaler_process(s_scratchLeft, s_scratchRight, count);
@@ -558,6 +566,14 @@ OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const
         }
         if (hrtf) {
             hrtf_process(s_scratchLeft, s_scratchRight, count);
+        }
+
+        // Hard brickwall safety limiter & NaN/Inf protection
+        for (UInt32 i = 0; i < count; i++) {
+            if (std::isnan(s_scratchLeft[i]) || std::isinf(s_scratchLeft[i])) s_scratchLeft[i] = 0.0f;
+            else s_scratchLeft[i] = std::max(-1.0f, std::min(1.0f, s_scratchLeft[i]));
+            if (std::isnan(s_scratchRight[i]) || std::isinf(s_scratchRight[i])) s_scratchRight[i] = 0.0f;
+            else s_scratchRight[i] = std::max(-1.0f, std::min(1.0f, s_scratchRight[i]));
         }
 
         void *firstOut = data->mBuffers[0].mData;
@@ -633,7 +649,6 @@ const SGAudioProcessor *SGNagareGetAudioProcessor(void) {
 // 4-Stem Source Separation
 void SGNagareSetStemsEnabled(BOOL enabled) {
     g_stemsEnabled.store(enabled, std::memory_order_release);
-    scnet_engine_set_enabled(enabled);
     separator_enable(enabled);
     if (enabled && (separator_get_mode() == SEPARATOR_MODE_NORMAL || g_stemMode.load(std::memory_order_relaxed) == SEPARATOR_MODE_NORMAL)) {
         separator_set_mode(SEPARATOR_MODE_CUSTOM);
@@ -666,7 +681,6 @@ void SGNagareSetStemLevels(float vocals, float drums, float bass, float other) {
     if (vocals != 1.0f || drums != 1.0f || bass != 1.0f || other != 1.0f) {
         if (!g_stemsEnabled.load(std::memory_order_relaxed)) {
             g_stemsEnabled.store(true, std::memory_order_release);
-            scnet_engine_set_enabled(true);
             separator_enable(true);
         }
         if (separator_get_mode() == SEPARATOR_MODE_NORMAL) {
@@ -675,7 +689,6 @@ void SGNagareSetStemLevels(float vocals, float drums, float bass, float other) {
         }
     }
 
-    scnet_engine_set_stem_levels(vocals, drums, bass, other);
     separator_set_stem_levels(vocals, bass, drums, other);
 
     NSUserDefaults *ud = NSUserDefaults.standardUserDefaults;
@@ -694,16 +707,12 @@ void SGNagareGetStemLevels(float *vocals, float *drums, float *bass, float *othe
 }
 
 void SGNagareGetStemMeters(float *vocals, float *drums, float *bass, float *other) {
-    if (scnet_engine_is_ready() && scnet_engine_is_enabled()) {
-        scnet_engine_get_stem_meters(vocals, drums, bass, other);
-    } else {
-        float v = 0.0f, b = 0.0f, d = 0.0f, o = 0.0f;
-        separator_get_stem_levels(&v, &b, &d, &o);
-        if (vocals) *vocals = v;
-        if (drums) *drums = d;
-        if (bass) *bass = b;
-        if (other) *other = o;
-    }
+    float v = 0.0f, b = 0.0f, d = 0.0f, o = 0.0f;
+    separator_get_stem_levels(&v, &b, &d, &o);
+    if (vocals) *vocals = v;
+    if (drums) *drums = d;
+    if (bass) *bass = b;
+    if (other) *other = o;
 }
 
 void SGNagareSetSeparationMode(int mode) {
@@ -981,7 +990,9 @@ void SGNagareGetFFTMagnitudes(float *output, int fftSize) {
 - (void)playerStateDidChange:(SPTPlayerState *)state {
     NSString *uri = SGURIString(state.track.URI);
     if (self.lastTrackURI && uri && ![self.lastTrackURI isEqualToString:uri]) {
-        scnet_engine_clear();
+        if (separator_is_enabled()) {
+            separator_enable(true);
+        }
     }
     self.lastTrackURI = uri;
 }

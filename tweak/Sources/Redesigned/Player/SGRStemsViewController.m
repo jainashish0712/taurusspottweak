@@ -862,25 +862,14 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 #pragma mark - State Refresh
 
 - (void)updateModelStatusUI {
-    SCNetModelManager *mgr = SCNetModelManager.sharedManager;
-    if (mgr.isModelReady) {
-        self.modelStatusLabel.text = @"● SCNet Neural Ready (9.1 dB SDR)";
+    if (SGNagareIsStemsEnabled()) {
+        self.modelStatusLabel.text = @"● Real-Time SIMD DSP Active (0 ms Latency)";
         self.modelStatusLabel.textColor = SGRAccent();
-        self.modelDownloadProgress.hidden = YES;
-    } else if (mgr.state == SCNetModelStateDownloading) {
-        self.modelStatusLabel.text = mgr.statusMessage ?: @"Downloading SCNet model...";
-        self.modelStatusLabel.textColor = SGRSecondary();
-        self.modelDownloadProgress.hidden = NO;
-        self.modelDownloadProgress.progress = mgr.downloadProgress;
-    } else if (mgr.state == SCNetModelStateFailed) {
-        self.modelStatusLabel.text = @"Download failed — tap switch to retry";
-        self.modelStatusLabel.textColor = [UIColor systemRedColor];
-        self.modelDownloadProgress.hidden = YES;
     } else {
-        self.modelStatusLabel.text = @"SCNet Neural 4-Stem Model (~43.5 MB)";
+        self.modelStatusLabel.text = @"4-Stem Real-Time Spectral Separation";
         self.modelStatusLabel.textColor = SGRSecondary();
-        self.modelDownloadProgress.hidden = YES;
     }
+    self.modelDownloadProgress.hidden = YES;
 }
 
 - (void)refreshControlsState {
@@ -919,9 +908,6 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 
 - (void)stemsMasterToggled:(UISwitch *)sender {
     SGNagareSetStemsEnabled(sender.isOn);
-    if (sender.isOn && !SCNetModelManager.sharedManager.isModelReady) {
-        [SCNetModelManager.sharedManager startDownloadIfNeeded];
-    }
     [self updateModelStatusUI];
 }
 
