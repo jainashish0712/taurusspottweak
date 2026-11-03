@@ -3,6 +3,10 @@
 #import "SGAudioSourceQueue.h"
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
     SGAudioStageSing,
     SGAudioStageSpeedPitch,
@@ -45,3 +49,7 @@ void SGAudioPipelineSetPullProcessor(SGAudioPullProcessor processor);
 // Output reader (e.g. for visualiser background): mono float samples on render thread
 typedef void (*SGAudioOutputReader)(const float *samples, UInt32 count, double sampleRate);
 void SGAudioPipelineSetOutputReader(SGAudioOutputReader reader);
+
+#ifdef __cplusplus
+}
+#endif
