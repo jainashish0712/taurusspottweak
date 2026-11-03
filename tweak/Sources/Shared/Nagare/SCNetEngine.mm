@@ -15,6 +15,7 @@
 extern "C" {
 int32_t SCNetWorkerStart(const char *modelPath, void (*callback)(const float*, const float*, const float*, const float*, int32_t));
 void SCNetWorkerStop(void);
+void SCNetWorkerReset(void);
 int32_t SCNetWorkerIsReady(void);
 void SCNetWorkerPushAudio(const float *left, const float *right, int32_t frames);
 }
@@ -62,6 +63,12 @@ static std::atomic<float> g_vocal_target{1.0f};
 static std::atomic<float> g_drums_target{1.0f};
 static std::atomic<float> g_bass_target{1.0f};
 static std::atomic<float> g_other_target{1.0f};
+
+// Real-time meter RMS levels (0.0 to 1.0)
+static std::atomic<float> g_meter_vocals{0.0f};
+static std::atomic<float> g_meter_drums{0.0f};
+static std::atomic<float> g_meter_bass{0.0f};
+static std::atomic<float> g_meter_other{0.0f};
 
 // Smoothed faders for render thread
 static float s_cur_vocal = 1.0f;
@@ -173,6 +180,22 @@ void scnet_engine_get_stem_levels(float* vocals, float* drums, float* bass, floa
     if (other) *other = g_other_target.load(std::memory_order_relaxed);
 }
 
+void scnet_engine_clear(void) {
+    g_ring.clear();
+    SCNetWorkerReset();
+    g_meter_vocals.store(0.0f, std::memory_order_relaxed);
+    g_meter_drums.store(0.0f, std::memory_order_relaxed);
+    g_meter_bass.store(0.0f, std::memory_order_relaxed);
+    g_meter_other.store(0.0f, std::memory_order_relaxed);
+}
+
+void scnet_engine_get_stem_meters(float* vocals, float* drums, float* bass, float* other) {
+    if (vocals) *vocals = g_meter_vocals.load(std::memory_order_relaxed);
+    if (drums) *drums = g_meter_drums.load(std::memory_order_relaxed);
+    if (bass) *bass = g_meter_bass.load(std::memory_order_relaxed);
+    if (other) *other = g_meter_other.load(std::memory_order_relaxed);
+}
+
 void scnet_engine_process(float* left, float* right, int num_frames) {
     if (!left || !right || num_frames <= 0) return;
 
@@ -199,6 +222,7 @@ void scnet_engine_process(float* left, float* right, int num_frames) {
     float o_tgt = g_other_target.load(std::memory_order_relaxed);
 
     uint32_t r = g_ring.readHead.load(std::memory_order_relaxed);
+    float sum_v = 0.0f, sum_d = 0.0f, sum_b = 0.0f, sum_o = 0.0f;
 
     for (int i = 0; i < num_frames; i++) {
         // Smooth fader adjustments
@@ -219,6 +243,11 @@ void scnet_engine_process(float* left, float* right, int num_frames) {
             float vl = g_ring.vocals[idx],    vr = g_ring.vocals[idx + 1];
             r++;
 
+            sum_v += vl * vl + vr * vr;
+            sum_d += dl * dl + dr * dr;
+            sum_b += bl * bl + br * br;
+            sum_o += ol * ol + orr * orr;
+
             // Mixed stem audio
             float mixed_l = s_cur_vocal * vl + s_cur_drums * dl + s_cur_bass * bl + s_cur_other * ol;
             float mixed_r = s_cur_vocal * vr + s_cur_drums * dr + s_cur_bass * br + s_cur_other * orr;
@@ -231,5 +260,15 @@ void scnet_engine_process(float* left, float* right, int num_frames) {
 
     if (hasStems) {
         g_ring.readHead.store(r, std::memory_order_release);
+        if (num_frames > 0) {
+            float rms_v = sqrtf(sum_v / (2.0f * num_frames));
+            float rms_d = sqrtf(sum_d / (2.0f * num_frames));
+            float rms_b = sqrtf(sum_b / (2.0f * num_frames));
+            float rms_o = sqrtf(sum_o / (2.0f * num_frames));
+            g_meter_vocals.store(g_meter_vocals.load(std::memory_order_relaxed) * 0.8f + rms_v * 0.2f, std::memory_order_relaxed);
+            g_meter_drums.store(g_meter_drums.load(std::memory_order_relaxed) * 0.8f + rms_d * 0.2f, std::memory_order_relaxed);
+            g_meter_bass.store(g_meter_bass.load(std::memory_order_relaxed) * 0.8f + rms_b * 0.2f, std::memory_order_relaxed);
+            g_meter_other.store(g_meter_other.load(std::memory_order_relaxed) * 0.8f + rms_o * 0.2f, std::memory_order_relaxed);
+        }
     }
 }

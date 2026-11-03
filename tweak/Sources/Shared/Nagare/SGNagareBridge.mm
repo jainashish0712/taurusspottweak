@@ -10,6 +10,7 @@
 #import "Core/SGPrefs.h"
 #import "Core/SGLog.h"
 #import "Shared/Audio/SGAudioPipeline.h"
+#import "Shared/Player/PlayerState.h"
 #include <atomic>
 #include <cmath>
 #include <algorithm>
@@ -693,12 +694,16 @@ void SGNagareGetStemLevels(float *vocals, float *drums, float *bass, float *othe
 }
 
 void SGNagareGetStemMeters(float *vocals, float *drums, float *bass, float *other) {
-    float v = 0.0f, b = 0.0f, d = 0.0f, o = 0.0f;
-    separator_get_stem_levels(&v, &b, &d, &o);
-    if (vocals) *vocals = v;
-    if (drums) *drums = d;
-    if (bass) *bass = b;
-    if (other) *other = o;
+    if (scnet_engine_is_ready() && scnet_engine_is_enabled()) {
+        scnet_engine_get_stem_meters(vocals, drums, bass, other);
+    } else {
+        float v = 0.0f, b = 0.0f, d = 0.0f, o = 0.0f;
+        separator_get_stem_levels(&v, &b, &d, &o);
+        if (vocals) *vocals = v;
+        if (drums) *drums = d;
+        if (bass) *bass = b;
+        if (other) *other = o;
+    }
 }
 
 void SGNagareSetSeparationMode(int mode) {
@@ -968,9 +973,27 @@ void SGNagareGetFFTMagnitudes(float *output, int fftSize) {
     if (output && fftSize > 0) nagare_get_fft(output, fftSize);
 }
 
+@interface SGNagareTrackWatcher : NSObject <SGPlayerStateObserver>
+@property (nonatomic, copy) NSString *lastTrackURI;
+@end
+
+@implementation SGNagareTrackWatcher
+- (void)playerStateDidChange:(SPTPlayerState *)state {
+    NSString *uri = SGURIString(state.track.URI);
+    if (self.lastTrackURI && uri && ![self.lastTrackURI isEqualToString:uri]) {
+        scnet_engine_clear();
+    }
+    self.lastTrackURI = uri;
+}
+@end
+
+static SGNagareTrackWatcher *s_trackWatcher = nil;
+
 // Auto-register into SGAudioPipeline upon tweak load
 __attribute__((used, constructor)) static void SGNagareAutoRegister(void) {
     SGNagareInit(44100.0);
     SGAudioPipelineRegister(SGAudioStageNagare, SGNagareGetAudioProcessor());
+    s_trackWatcher = [[SGNagareTrackWatcher alloc] init];
+    SGAddPlayerStateObserver(s_trackWatcher);
     SGLog(@"nagare: stage registered with audio pipeline");
 }

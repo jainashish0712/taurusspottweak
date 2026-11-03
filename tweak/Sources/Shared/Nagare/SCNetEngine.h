@@ -24,6 +24,8 @@ bool scnet_engine_is_ready(void);
 // Real-time Stem Faders (0.0 to 2.0, 1.0 = 100%)
 void scnet_engine_set_stem_levels(float vocals, float drums, float bass, float other);
 void scnet_engine_get_stem_levels(float* vocals, float* drums, float* bass, float* other);
+void scnet_engine_get_stem_meters(float* vocals, float* drums, float* bass, float* other);
+void scnet_engine_clear(void);
 
 // Real-time CoreAudio Render Callback
 void scnet_engine_process(float* left, float* right, int num_frames);

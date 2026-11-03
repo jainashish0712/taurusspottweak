@@ -66,6 +66,10 @@ private final class SCNetWorkerSession: @unchecked Sendable {
         isRunning = false
         isModelReady = false
         separator = nil
+        reset()
+    }
+
+    func reset() {
         inputLock.lock()
         inputPcm.removeAll(keepingCapacity: true)
         prevDrumsTail.removeAll()
@@ -205,6 +209,13 @@ public func scnetWorkerStart(_ modelPath: UnsafePointer<CChar>?, _ callback: SCN
 public func scnetWorkerStop() {
     if #available(iOS 18.0, macOS 27.0, *) {
         SCNetWorkerSession.shared.stop()
+    }
+}
+
+@_cdecl("SCNetWorkerReset")
+public func scnetWorkerReset() {
+    if #available(iOS 18.0, macOS 27.0, *) {
+        SCNetWorkerSession.shared.reset()
     }
 }
 
