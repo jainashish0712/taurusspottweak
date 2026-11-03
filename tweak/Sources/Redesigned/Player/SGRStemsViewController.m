@@ -2,6 +2,7 @@
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Shared/Nagare/SGNagareBridge.h"
+#import "Shared/Nagare/SCNetModelManager.h"
 #import <math.h>
 
 static const CGFloat kPadding = 18.0;
@@ -19,6 +20,9 @@ static const CGFloat kPadding = 18.0;
 
 // Stems Controls
 @property (nonatomic, strong) UISwitch *stemsMasterSwitch;
+@property (nonatomic, strong) UILabel *modelStatusLabel;
+@property (nonatomic, strong) UIProgressView *modelDownloadProgress;
+@property (nonatomic, strong) id modelStatusObserver;
 @property (nonatomic, strong) UISegmentedControl *modePicker;
 @property (nonatomic, strong) UISlider *vocalsSlider;
 @property (nonatomic, strong) UISlider *drumsSlider;
@@ -109,6 +113,23 @@ static const CGFloat kPadding = 18.0;
     [self setupScrollView];
     [self setupTabs];
     [self refreshControlsState];
+
+    __weak __typeof__(self) weakSelf = self;
+    self.modelStatusObserver = [NSNotificationCenter.defaultCenter addObserverForName:SCNetModelStatusDidChangeNotification
+                                                                              object:nil
+                                                                               queue:NSOperationQueue.mainQueue
+                                                                          usingBlock:^(NSNotification * _Nonnull note) {
+        __strong __typeof__(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf updateModelStatusUI];
+    }];
+}
+
+- (void)dealloc {
+    if (self.modelStatusObserver) {
+        [NSNotificationCenter.defaultCenter removeObserver:self.modelStatusObserver];
+        self.modelStatusObserver = nil;
+    }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -324,26 +345,51 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 
     // Master Switch Card
     UIView *card = [self createCardView];
-    [card.heightAnchor constraintEqualToConstant:72].active = YES;
+    [card.heightAnchor constraintEqualToConstant:84].active = YES;
 
-    UILabel *switchLabel = [self createTitleLabel:@"Separate Audio Stems" subtitle:@"SCNet Neural 4-Stem Model (9.1 dB SDR)"];
-    switchLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    UILabel *switchTitle = [[UILabel alloc] init];
+    switchTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    switchTitle.text = @"Separate Audio Stems";
+    switchTitle.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    switchTitle.textColor = SGRPrimary();
+
+    self.modelStatusLabel = [[UILabel alloc] init];
+    self.modelStatusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.modelStatusLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+    self.modelStatusLabel.textColor = SGRSecondary();
+
+    UIStackView *titleStack = [[UIStackView alloc] initWithArrangedSubviews:@[switchTitle, self.modelStatusLabel]];
+    titleStack.translatesAutoresizingMaskIntoConstraints = NO;
+    titleStack.axis = UILayoutConstraintAxisVertical;
+    titleStack.spacing = 2.0;
 
     self.stemsMasterSwitch = [[UISwitch alloc] init];
     self.stemsMasterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     self.stemsMasterSwitch.onTintColor = SGRAccent();
     [self.stemsMasterSwitch addTarget:self action:@selector(stemsMasterToggled:) forControlEvents:UIControlEventValueChanged];
 
-    UIStackView *cardRow = [[UIStackView alloc] initWithArrangedSubviews:@[switchLabel, self.stemsMasterSwitch]];
+    UIStackView *cardRow = [[UIStackView alloc] initWithArrangedSubviews:@[titleStack, self.stemsMasterSwitch]];
     cardRow.translatesAutoresizingMaskIntoConstraints = NO;
     cardRow.alignment = UIStackViewAlignmentCenter;
     cardRow.distribution = UIStackViewDistributionEqualSpacing;
     [card addSubview:cardRow];
 
+    self.modelDownloadProgress = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+    self.modelDownloadProgress.translatesAutoresizingMaskIntoConstraints = NO;
+    self.modelDownloadProgress.progressTintColor = SGRAccent();
+    self.modelDownloadProgress.trackTintColor = [UIColor.whiteColor colorWithAlphaComponent:0.08];
+    self.modelDownloadProgress.hidden = YES;
+    [card addSubview:self.modelDownloadProgress];
+
     [NSLayoutConstraint activateConstraints:@[
         [cardRow.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
         [cardRow.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
-        [cardRow.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
+        [cardRow.topAnchor constraintEqualToAnchor:card.topAnchor constant:14],
+
+        [self.modelDownloadProgress.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [self.modelDownloadProgress.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [self.modelDownloadProgress.topAnchor constraintEqualToAnchor:cardRow.bottomAnchor constant:8],
+        [self.modelDownloadProgress.heightAnchor constraintEqualToConstant:3],
     ]];
     [stack addArrangedSubview:card];
 
@@ -815,8 +861,31 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 
 #pragma mark - State Refresh
 
+- (void)updateModelStatusUI {
+    SCNetModelManager *mgr = SCNetModelManager.sharedManager;
+    if (mgr.isModelReady) {
+        self.modelStatusLabel.text = @"● SCNet Neural Ready (9.1 dB SDR)";
+        self.modelStatusLabel.textColor = SGRAccent();
+        self.modelDownloadProgress.hidden = YES;
+    } else if (mgr.state == SCNetModelStateDownloading) {
+        self.modelStatusLabel.text = mgr.statusMessage ?: @"Downloading SCNet model...";
+        self.modelStatusLabel.textColor = SGRSecondary();
+        self.modelDownloadProgress.hidden = NO;
+        self.modelDownloadProgress.progress = mgr.downloadProgress;
+    } else if (mgr.state == SCNetModelStateFailed) {
+        self.modelStatusLabel.text = @"Download failed — tap switch to retry";
+        self.modelStatusLabel.textColor = [UIColor systemRedColor];
+        self.modelDownloadProgress.hidden = YES;
+    } else {
+        self.modelStatusLabel.text = @"SCNet Neural 4-Stem Model (~43.5 MB)";
+        self.modelStatusLabel.textColor = SGRSecondary();
+        self.modelDownloadProgress.hidden = YES;
+    }
+}
+
 - (void)refreshControlsState {
     self.stemsMasterSwitch.on = SGNagareIsStemsEnabled();
+    [self updateModelStatusUI];
     self.modePicker.selectedSegmentIndex = SegmentIndexFromNagareMode(SGNagareGetSeparationMode());
 
     float v = 1, d = 1, b = 1, o = 1;
@@ -850,6 +919,10 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 
 - (void)stemsMasterToggled:(UISwitch *)sender {
     SGNagareSetStemsEnabled(sender.isOn);
+    if (sender.isOn && !SCNetModelManager.sharedManager.isModelReady) {
+        [SCNetModelManager.sharedManager startDownloadIfNeeded];
+    }
+    [self updateModelStatusUI];
 }
 
 - (void)modePicked:(UISegmentedControl *)sender {
