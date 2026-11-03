@@ -1,6 +1,7 @@
 #import "SGNagareBridge.h"
 #import "nagare_dsp.h"
 #import "source_separator.h"
+#import "SCNetEngine.h"
 #import "hrtf_processor.h"
 #import "polyphase_resampler.h"
 #import "audio_upscaler.h"
@@ -480,9 +481,9 @@ OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const
             memset(right, 0, frames * sizeof(float));
         }
 
-        // 1. 4-Stem Source Separation
+        // 1. 4-Stem Source Separation (SCNet Neural Model)
         if (stems) {
-            separator_process(left, right, frames);
+            scnet_engine_process(left, right, frames);
         }
 
         // 2. Audio Upscaler (SBR / DSEE)
@@ -535,7 +536,7 @@ OSStatus renderedCallback(void *refCon, AudioUnitRenderActionFlags *flags, const
         }
 
         if (stems) {
-            separator_process(s_scratchLeft, s_scratchRight, count);
+            scnet_engine_process(s_scratchLeft, s_scratchRight, count);
         }
         if (upscaler) {
             upscaler_process(s_scratchLeft, s_scratchRight, count);
@@ -595,6 +596,7 @@ void SGNagareInit(double sampleRate) {
 
     nagare_init((int)sampleRate, 2, 1024);
     separator_init((int)sampleRate);
+    scnet_engine_init((int)sampleRate);
     upscaler_init((int)sampleRate);
     restorer_init((int)sampleRate);
     hrtf_init((int)sampleRate);
@@ -616,6 +618,7 @@ void SGNagareReset(void) {
     double rate = g_currentSampleRate.load(std::memory_order_relaxed);
     nagare_release();
     separator_release();
+    scnet_engine_release();
     upscaler_release();
     restorer_release();
     hrtf_release();
@@ -629,6 +632,7 @@ const SGAudioProcessor *SGNagareGetAudioProcessor(void) {
 // 4-Stem Source Separation
 void SGNagareSetStemsEnabled(BOOL enabled) {
     g_stemsEnabled.store(enabled, std::memory_order_release);
+    scnet_engine_set_enabled(enabled);
     separator_enable(enabled);
     if (enabled && (separator_get_mode() == SEPARATOR_MODE_NORMAL || g_stemMode.load(std::memory_order_relaxed) == SEPARATOR_MODE_NORMAL)) {
         separator_set_mode(SEPARATOR_MODE_CUSTOM);
@@ -641,6 +645,10 @@ void SGNagareSetStemsEnabled(BOOL enabled) {
 
 BOOL SGNagareIsStemsEnabled(void) {
     return g_stemsEnabled.load(std::memory_order_relaxed);
+}
+
+BOOL SGNagareIsSCNetReady(void) {
+    return scnet_engine_is_ready();
 }
 
 void SGNagareSetStemLevels(float vocals, float drums, float bass, float other) {
@@ -657,6 +665,7 @@ void SGNagareSetStemLevels(float vocals, float drums, float bass, float other) {
     if (vocals != 1.0f || drums != 1.0f || bass != 1.0f || other != 1.0f) {
         if (!g_stemsEnabled.load(std::memory_order_relaxed)) {
             g_stemsEnabled.store(true, std::memory_order_release);
+            scnet_engine_set_enabled(true);
             separator_enable(true);
         }
         if (separator_get_mode() == SEPARATOR_MODE_NORMAL) {
@@ -665,6 +674,7 @@ void SGNagareSetStemLevels(float vocals, float drums, float bass, float other) {
         }
     }
 
+    scnet_engine_set_stem_levels(vocals, drums, bass, other);
     separator_set_stem_levels(vocals, bass, drums, other);
 
     NSUserDefaults *ud = NSUserDefaults.standardUserDefaults;

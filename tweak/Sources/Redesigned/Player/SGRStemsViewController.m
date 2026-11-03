@@ -326,7 +326,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     UIView *card = [self createCardView];
     [card.heightAnchor constraintEqualToConstant:72].active = YES;
 
-    UILabel *switchLabel = [self createTitleLabel:@"Separate Audio Stems" subtitle:@"Real-time HPSS & Mid/Side separation"];
+    UILabel *switchLabel = [self createTitleLabel:@"Separate Audio Stems" subtitle:@"SCNet Neural 4-Stem Model (9.1 dB SDR)"];
     switchLabel.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.stemsMasterSwitch = [[UISwitch alloc] init];
