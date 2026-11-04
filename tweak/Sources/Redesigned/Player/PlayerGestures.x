@@ -7,6 +7,7 @@
 #import "SGRStemsViewController.h"
 #import <objc/runtime.h>
 
+
 @interface SGRStemsEdgeGestureDelegate : NSObject <UIGestureRecognizerDelegate>
 + (instancetype)sharedDelegate;
 @end
