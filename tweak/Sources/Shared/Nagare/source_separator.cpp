@@ -546,15 +546,26 @@ void separator_release(void) {
     g_separator.initialized = false;
 }
 
+void separator_clear(void) {
+    if (!g_separator.initialized) return;
+    memset(g_separator.input_buffer_left, 0, sizeof(g_separator.input_buffer_left));
+    memset(g_separator.input_buffer_right, 0, sizeof(g_separator.input_buffer_right));
+    memset(g_separator.output_buffer_left, 0, sizeof(g_separator.output_buffer_left));
+    memset(g_separator.output_buffer_right, 0, sizeof(g_separator.output_buffer_right));
+    memset(g_separator.prev_mag_l, 0, sizeof(g_separator.prev_mag_l));
+    memset(g_separator.prev_mag_r, 0, sizeof(g_separator.prev_mag_r));
+    g_separator.hop_pos = 0;
+    g_separator.warmup_hops = 0;
+    g_separator.has_valid_output = false;
+    g_separator.meter_vocals = 0.0f;
+    g_separator.meter_bass = 0.0f;
+    g_separator.meter_drums = 0.0f;
+    g_separator.meter_other = 0.0f;
+}
+
 void separator_enable(bool enabled) {
     if (enabled && !g_separator.enabled) {
-        memset(g_separator.input_buffer_left, 0, sizeof(g_separator.input_buffer_left));
-        memset(g_separator.input_buffer_right, 0, sizeof(g_separator.input_buffer_right));
-        memset(g_separator.output_buffer_left, 0, sizeof(g_separator.output_buffer_left));
-        memset(g_separator.output_buffer_right, 0, sizeof(g_separator.output_buffer_right));
-        g_separator.hop_pos = 0;
-        g_separator.warmup_hops = 0;
-        g_separator.has_valid_output = false;
+        separator_clear();
     }
     g_separator.enabled = enabled;
 }

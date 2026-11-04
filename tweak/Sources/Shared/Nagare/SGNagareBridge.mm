@@ -1012,13 +1012,30 @@ void SGNagareGetFFTMagnitudes(float *output, int fftSize) {
 @end
 
 @implementation SGNagareTrackWatcher
+- (instancetype)init {
+    if ((self = [super init])) {
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(handleSeek:)
+                                                   name:SGPlayerPlaybackDidSeekNotification
+                                                 object:nil];
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+}
+
+- (void)handleSeek:(NSNotification *)note {
+    spleeter_engine_clear();
+    separator_clear();
+}
+
 - (void)playerStateDidChange:(SPTPlayerState *)state {
     NSString *uri = SGURIString(state.track.URI);
     if (self.lastTrackURI && uri && ![self.lastTrackURI isEqualToString:uri]) {
         spleeter_engine_clear();
-        if (separator_is_enabled()) {
-            separator_enable(true);
-        }
+        separator_clear();
     }
     self.lastTrackURI = uri;
 }

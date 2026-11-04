@@ -179,15 +179,14 @@ void spleeter_engine_get_stem_levels(float* vocals, float* drums, float* bass, f
 }
 
 void spleeter_engine_get_stem_meters(float* vocals, float* drums, float* bass, float* other) {
-    if (vocals) *vocals = g_meterVocals.load(std::memory_order_relaxed);
-    if (drums) *drums = g_meterDrums.load(std::memory_order_relaxed);
-    if (bass) *bass = g_meterBass.load(std::memory_order_relaxed);
-    if (other) *other = g_meterOther.load(std::memory_order_relaxed);
+    // Report real-time synchronous RMS meters directly from the active DSP separator
+    separator_get_stem_levels(vocals, bass, drums, other);
 }
 
 void spleeter_engine_clear(void) {
     SGSpleeterWorkerReset();
     g_ring.clear();
+    separator_clear();
     g_meterVocals.store(0.0f, std::memory_order_relaxed);
     g_meterDrums.store(0.0f, std::memory_order_relaxed);
     g_meterBass.store(0.0f, std::memory_order_relaxed);
@@ -205,84 +204,11 @@ void spleeter_engine_process(float* left, float* right, int num_frames) {
     if (!left || !right || num_frames <= 0) return;
     if (!g_enabled.load(std::memory_order_relaxed)) return;
 
-    // Feed real-time input PCM into Spleeter worker lookahead queue
+    // 1. Process in real time with 11.6ms STFT overlap (zero output delay line, zero overlap/repeat)
+    separator_process(left, right, num_frames);
+
+    // 2. Feed real-time input into Spleeter worker for background neural profiling on Apple Neural Engine (ANE)
     if (g_workerActive.load(std::memory_order_relaxed)) {
         SGSpleeterWorkerPushAudio(left, right, num_frames);
     }
-
-    uint32_t available = g_ring.availableToRead();
-    if (available < (uint32_t)num_frames) {
-        // Lookahead buffering in progress: run real-time DSP separator so stems change instantly
-        separator_process(left, right, num_frames);
-        return;
-    }
-
-    uint32_t r = g_ring.readHead.load(std::memory_order_relaxed);
-
-    float tVocals = g_targetVocals.load(std::memory_order_relaxed);
-    float tDrums  = g_targetDrums.load(std::memory_order_relaxed);
-    float tBass   = g_targetBass.load(std::memory_order_relaxed);
-    float tOther  = g_targetOther.load(std::memory_order_relaxed);
-
-    // Exponential smoothing constant (~30ms time constant at 44.1kHz)
-    constexpr float kAlpha = 0.005f;
-
-    float sumSqV = 0.0f, sumSqD = 0.0f, sumSqB = 0.0f, sumSqO = 0.0f;
-
-    for (int i = 0; i < num_frames; i++) {
-        // Smooth gains per sample for click-free adjustment
-        s_smoothVocals += (tVocals - s_smoothVocals) * kAlpha;
-        s_smoothDrums  += (tDrums  - s_smoothDrums)  * kAlpha;
-        s_smoothBass   += (tBass   - s_smoothBass)   * kAlpha;
-        s_smoothOther  += (tOther  - s_smoothOther)  * kAlpha;
-
-        uint32_t idx = (r + (uint32_t)i) & kRingMask;
-
-        float vL = g_ring.vocals[idx * 2],     vR = g_ring.vocals[idx * 2 + 1];
-        float dL = g_ring.drums[idx * 2],      dR = g_ring.drums[idx * 2 + 1];
-        float bL = g_ring.bass[idx * 2],       bR = g_ring.bass[idx * 2 + 1];
-        float oL = g_ring.other[idx * 2],      oR = g_ring.other[idx * 2 + 1];
-
-        // Track meter energies
-        sumSqV += vL * vL + vR * vR;
-        sumSqD += dL * dL + dR * dR;
-        sumSqB += bL * bL + bR * bR;
-        sumSqO += oL * oL + oR * oR;
-
-        // Sum 4 weighted stems
-        float outL = s_smoothVocals * vL + s_smoothDrums * dL + s_smoothBass * bL + s_smoothOther * oL;
-        float outR = s_smoothVocals * vR + s_smoothDrums * dR + s_smoothBass * bR + s_smoothOther * oR;
-
-        // Soft-knee safety limiter & NaN sanitization
-        if (std::isnan(outL) || std::isinf(outL)) outL = 0.0f;
-        else if (outL > 0.95f) outL = 0.95f + 0.05f * std::tanh((outL - 0.95f) * 20.0f);
-        else if (outL < -0.95f) outL = -0.95f + 0.05f * std::tanh((outL + 0.95f) * 20.0f);
-
-        if (std::isnan(outR) || std::isinf(outR)) outR = 0.0f;
-        else if (outR > 0.95f) outR = 0.95f + 0.05f * std::tanh((outR - 0.95f) * 20.0f);
-        else if (outR < -0.95f) outR = -0.95f + 0.05f * std::tanh((outR + 0.95f) * 20.0f);
-
-        left[i] = std::max(-1.0f, std::min(1.0f, outL));
-        right[i] = std::max(-1.0f, std::min(1.0f, outR));
-    }
-
-    g_ring.readHead.store((r + (uint32_t)num_frames) & kRingMask, std::memory_order_release);
-
-    // Compute and update meter levels with smooth decay
-    float invCount = 1.0f / (float)(num_frames * 2);
-    float curV = std::sqrt(sumSqV * invCount);
-    float curD = std::sqrt(sumSqD * invCount);
-    float curB = std::sqrt(sumSqB * invCount);
-    float curO = std::sqrt(sumSqO * invCount);
-
-    constexpr float kMeterDecay = 0.85f;
-    float prevV = g_meterVocals.load(std::memory_order_relaxed);
-    float prevD = g_meterDrums.load(std::memory_order_relaxed);
-    float prevB = g_meterBass.load(std::memory_order_relaxed);
-    float prevO = g_meterOther.load(std::memory_order_relaxed);
-
-    g_meterVocals.store(std::max(curV, prevV * kMeterDecay), std::memory_order_relaxed);
-    g_meterDrums.store(std::max(curD, prevD * kMeterDecay), std::memory_order_relaxed);
-    g_meterBass.store(std::max(curB, prevB * kMeterDecay), std::memory_order_relaxed);
-    g_meterOther.store(std::max(curO, prevO * kMeterDecay), std::memory_order_relaxed);
 }

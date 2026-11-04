@@ -10,6 +10,10 @@
 extern "C" {
 #endif
 
+// Notification broadcast when the player seeks to a new timestamp
+extern NSNotificationName const SGPlayerPlaybackDidSeekNotification;
+extern NSString *const SGPlayerSeekPositionKey;
+
 // A URI Spotify types as id (NSURL or NSString) as a string; nil for anything else.
 NSString *SGURIString(id uri);
 

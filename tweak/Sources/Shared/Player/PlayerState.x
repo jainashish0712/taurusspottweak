@@ -2,6 +2,9 @@
 #import "Core/SGCore.h"
 #import "PlayerState.h"
 
+NSNotificationName const SGPlayerPlaybackDidSeekNotification = @"SGPlayerPlaybackDidSeekNotification";
+NSString *const SGPlayerSeekPositionKey = @"position";
+
 NSString *SGURIString(id uri) {
     if ([uri isKindOfClass:NSString.class]) return uri;
     if ([uri isKindOfClass:NSURL.class]) return ((NSURL *)uri).absoluteString;
@@ -78,6 +81,13 @@ static SGPlayerObserver *sg_ownObserver;
 %end
 
 %hook SPTEsperantoPlayer
+- (id)seekTo:(double)seconds {
+    id result = %orig;
+    [NSNotificationCenter.defaultCenter postNotificationName:SGPlayerPlaybackDidSeekNotification
+                                                      object:self
+                                                    userInfo:@{SGPlayerSeekPositionKey: @(seconds)}];
+    return result;
+}
 - (void)addPlayerObserver:(id)observer {
     %orig;
     id player = self;

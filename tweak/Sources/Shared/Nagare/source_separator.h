@@ -76,6 +76,11 @@ void separator_release(void);
 void separator_enable(bool enabled);
 
 /**
+ * Clear separator buffers and reset state (on track change or seek)
+ */
+void separator_clear(void);
+
+/**
  * Check if separation is enabled
  */
 bool separator_is_enabled(void);
