@@ -187,11 +187,6 @@ void spleeter_engine_process(float* left, float* right, int num_frames) {
     if (!left || !right || num_frames <= 0) return;
     if (!g_enabled.load(std::memory_order_relaxed)) return;
 
-    // 1. Process in real time with 11.6ms STFT overlap (zero output delay line, zero overlap/repeat)
+    // Process in real time with 11.6ms STFT overlap (zero output delay line, zero overlap/repeat)
     separator_process(left, right, num_frames);
-
-    // 2. Feed real-time input into Spleeter worker for background neural profiling on Apple Neural Engine (ANE)
-    if (g_workerActive.load(std::memory_order_relaxed)) {
-        SGSpleeterWorkerPushAudio(left, right, num_frames);
-    }
 }

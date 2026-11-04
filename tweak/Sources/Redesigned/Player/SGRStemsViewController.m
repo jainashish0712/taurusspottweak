@@ -6,6 +6,8 @@
 #import "Shared/Nagare/SGSpleeterModelManager.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <math.h>
+#import <mach/mach.h>
+#import <dlfcn.h>
 
 static const CGFloat kPadding = 18.0;
 
@@ -70,7 +72,87 @@ static const CGFloat kPadding = 18.0;
 @property (nonatomic, strong) UISlider *reverbSlider;
 
 @property (nonatomic, strong) NSTimer *meterTimer;
+@property (nonatomic, strong) UILabel *telemetryLabel;
+@property (nonatomic) NSInteger telemetryTick;
 @end
+
+static float SGRGetCPUUsage(void) {
+    kern_return_t kr;
+    thread_array_t thread_list;
+    mach_msg_type_number_t thread_count;
+    thread_info_data_t thinfo;
+    mach_msg_type_number_t thread_info_count;
+    thread_basic_info_t basic_info_th;
+
+    kr = task_threads(mach_task_self(), &thread_list, &thread_count);
+    if (kr != KERN_SUCCESS) return 0.0f;
+
+    float tot_cpu = 0.0f;
+    for (mach_msg_type_number_t j = 0; j < thread_count; j++) {
+        thread_info_count = THREAD_INFO_MAX;
+        kr = thread_info(thread_list[j], THREAD_BASIC_INFO, (thread_info_t)thinfo, &thread_info_count);
+        if (kr == KERN_SUCCESS) {
+            basic_info_th = (thread_basic_info_t)thinfo;
+            if (!(basic_info_th->flags & TH_FLAGS_IDLE)) {
+                tot_cpu += basic_info_th->cpu_usage / (float)TH_USAGE_SCALE * 100.0f;
+            }
+        }
+    }
+    vm_deallocate(mach_task_self(), (vm_address_t)thread_list, thread_count * sizeof(thread_act_t));
+    return tot_cpu;
+}
+
+static float SGRGetGPUUsage(void) {
+    static mach_port_t (*s_IOServiceGetMatchingService)(mach_port_t, CFDictionaryRef) = NULL;
+    static CFMutableDictionaryRef (*s_IOServiceMatching)(const char *) = NULL;
+    static kern_return_t (*s_IORegistryEntryCreateCFProperties)(mach_port_t, CFMutableDictionaryRef *, CFAllocatorRef, uint32_t) = NULL;
+    static BOOL s_checked = NO;
+    static mach_port_t s_accel = 0;
+
+    if (!s_checked) {
+        s_checked = YES;
+        s_IOServiceGetMatchingService = (mach_port_t (*)(mach_port_t, CFDictionaryRef))dlsym(RTLD_DEFAULT, "IOServiceGetMatchingService");
+        s_IOServiceMatching = (CFMutableDictionaryRef (*)(const char *))dlsym(RTLD_DEFAULT, "IOServiceMatching");
+        s_IORegistryEntryCreateCFProperties = (kern_return_t (*)(mach_port_t, CFMutableDictionaryRef *, CFAllocatorRef, uint32_t))dlsym(RTLD_DEFAULT, "IORegistryEntryCreateCFProperties");
+
+        if (s_IOServiceGetMatchingService && s_IOServiceMatching) {
+            CFMutableDictionaryRef match = s_IOServiceMatching("IOAccelerator");
+            if (match) {
+                s_accel = s_IOServiceGetMatchingService(0, match);
+            }
+        }
+    }
+
+    if (!s_accel || !s_IORegistryEntryCreateCFProperties) {
+        return -1.0f;
+    }
+
+    CFMutableDictionaryRef props = NULL;
+    if (s_IORegistryEntryCreateCFProperties(s_accel, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS && props) {
+        NSDictionary *dict = (__bridge NSDictionary *)props;
+        NSDictionary *perf = dict[@"PerformanceStatistics"];
+        float usage = -1.0f;
+        if ([perf isKindOfClass:NSDictionary.class]) {
+            NSNumber *val = perf[@"Device Utilization %"] ?: perf[@"GPU Core Utilization"] ?: perf[@"GPU Activity(%)"];
+            if (val) usage = [val floatValue];
+        }
+        CFRelease(props);
+        return usage;
+    }
+    return -1.0f;
+}
+
+static NSString *SGRGetThermalString(void) {
+    if (@available(iOS 11.0, *)) {
+        switch (NSProcessInfo.processInfo.thermalState) {
+            case NSProcessInfoThermalStateNominal: return @"Nominal";
+            case NSProcessInfoThermalStateFair:    return @"Fair";
+            case NSProcessInfoThermalStateSerious: return @"Warm";
+            case NSProcessInfoThermalStateCritical:return @"Hot";
+        }
+    }
+    return @"Nominal";
+}
 
 @implementation SGRStemsViewController
 
@@ -152,12 +234,41 @@ static const CGFloat kPadding = 18.0;
 
 - (void)startMeterTimer {
     [self stopMeterTimer];
+    [self updateTelemetry];
     __weak __typeof__(self) weakSelf = self;
     self.meterTimer = [NSTimer scheduledTimerWithTimeInterval:0.04 repeats:YES block:^(NSTimer * _Nonnull timer) {
         __strong __typeof__(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         [strongSelf updateMeters];
+        strongSelf.telemetryTick++;
+        if (strongSelf.telemetryTick % 12 == 0) {
+            [strongSelf updateTelemetry];
+        }
     }];
+}
+
+- (void)updateTelemetry {
+    float cpu = SGRGetCPUUsage();
+    float gpu = SGRGetGPUUsage();
+    NSString *thermal = SGRGetThermalString();
+
+    if (gpu >= 0.0f) {
+        self.telemetryLabel.text = [NSString stringWithFormat:@"CPU: %.0f%% • GPU: %.0f%%", cpu, gpu];
+        if (self.modelDetailLabel && self.tabPicker.selectedSegmentIndex == 0) {
+            SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
+            if (mgr.isModelReady) {
+                self.modelDetailLabel.text = [NSString stringWithFormat:@"Engine: Apple Neural Engine (ANE) / GPU\nRealtime: CPU %.0f%% • GPU %.0f%% • %@", cpu, gpu, thermal];
+            }
+        }
+    } else {
+        self.telemetryLabel.text = [NSString stringWithFormat:@"CPU: %.0f%% • %@", cpu, thermal];
+        if (self.modelDetailLabel && self.tabPicker.selectedSegmentIndex == 0) {
+            SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
+            if (mgr.isModelReady) {
+                self.modelDetailLabel.text = [NSString stringWithFormat:@"Engine: Apple Neural Engine (ANE) / GPU\nRealtime: CPU %.0f%% • %@", cpu, thermal];
+            }
+        }
+    }
 }
 
 - (void)stopMeterTimer {
@@ -235,6 +346,14 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     subtitleLabel.textColor = SGRSecondary();
     [header addSubview:subtitleLabel];
 
+    self.telemetryLabel = [[UILabel alloc] init];
+    self.telemetryLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.telemetryLabel.font = [UIFont monospacedDigitSystemFontOfSize:11 weight:UIFontWeightMedium];
+    self.telemetryLabel.textColor = SGRAccent();
+    self.telemetryLabel.text = @"CPU: -- • GPU: --";
+    self.telemetryLabel.textAlignment = NSTextAlignmentRight;
+    [header addSubview:self.telemetryLabel];
+
     UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     closeBtn.translatesAutoresizingMaskIntoConstraints = NO;
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:24 weight:UIImageSymbolWeightMedium];
@@ -261,9 +380,12 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
         [titleLabel.leadingAnchor constraintEqualToAnchor:header.leadingAnchor],
         [titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:closeBtn.leadingAnchor constant:-8],
 
+        [self.telemetryLabel.centerYAnchor constraintEqualToAnchor:subtitleLabel.centerYAnchor],
+        [self.telemetryLabel.trailingAnchor constraintEqualToAnchor:closeBtn.leadingAnchor constant:-10],
+
         [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:2],
         [subtitleLabel.leadingAnchor constraintEqualToAnchor:header.leadingAnchor],
-        [subtitleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:closeBtn.leadingAnchor constant:-8],
+        [subtitleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.telemetryLabel.leadingAnchor constant:-6],
 
         [closeBtn.topAnchor constraintEqualToAnchor:header.topAnchor],
         [closeBtn.trailingAnchor constraintEqualToAnchor:header.trailingAnchor],
@@ -422,7 +544,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     self.modelDetailLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.modelDetailLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
     self.modelDetailLabel.textColor = SGRSecondary();
-    self.modelDetailLabel.numberOfLines = 2;
+    self.modelDetailLabel.numberOfLines = 0;
 
     UIStackView *modelTextStack = [[UIStackView alloc] initWithArrangedSubviews:@[modelTitle, self.modelDetailLabel]];
     modelTextStack.translatesAutoresizingMaskIntoConstraints = NO;
