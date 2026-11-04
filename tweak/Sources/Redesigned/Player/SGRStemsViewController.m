@@ -928,25 +928,18 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     btn.clipsToBounds = YES;
     btn.tintColor = destructive ? [UIColor systemRedColor] : SGRPrimary();
 
-    if (@available(iOS 15.0, *)) {
-        UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
-        config.image = [UIImage systemImageNamed:systemIcon];
-        config.imagePadding = 6.0;
-        config.imagePlacement = NSDirectionalRectEdgeLeading;
-        config.baseForegroundColor = destructive ? [UIColor systemRedColor] : SGRPrimary();
+    UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
+    config.image = [UIImage systemImageNamed:systemIcon];
+    config.imagePadding = 6.0;
+    config.imagePlacement = NSDirectionalRectEdgeLeading;
+    config.baseForegroundColor = destructive ? [UIColor systemRedColor] : SGRPrimary();
 
-        NSMutableAttributedString *titleAttr = [[NSMutableAttributedString alloc] initWithString:title attributes:@{
-            NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightMedium]
-        }];
-        config.attributedTitle = titleAttr;
-        config.contentInsets = NSDirectionalEdgeInsetsMake(6, 8, 6, 8);
-        btn.configuration = config;
-    } else {
-        [btn setTitle:title forState:UIControlStateNormal];
-        [btn setImage:[UIImage systemImageNamed:systemIcon] forState:UIControlStateNormal];
-        btn.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-        btn.imageEdgeInsets = UIEdgeInsetsMake(0, -4, 0, 4);
-    }
+    NSMutableAttributedString *titleAttr = [[NSMutableAttributedString alloc] initWithString:title attributes:@{
+        NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightMedium]
+    }];
+    config.attributedTitle = titleAttr;
+    config.contentInsets = NSDirectionalEdgeInsetsMake(6, 8, 6, 8);
+    btn.configuration = config;
 
     [btn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
     return btn;
@@ -1092,19 +1085,8 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 #pragma mark - Actions
 
 - (void)importModelTapped {
-    NSArray *types;
-    if (@available(iOS 14.0, *)) {
-        types = @[UTTypeZip, UTTypeFolder];
-    } else {
-        types = @[@"public.zip-archive", @"public.folder", @"com.pkware.zip-archive", @"public.item"];
-    }
-
-    UIDocumentPickerViewController *picker;
-    if (@available(iOS 14.0, *)) {
-        picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types asCopy:YES];
-    } else {
-        picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:types inMode:UIDocumentPickerModeImport];
-    }
+    NSArray<UTType *> *types = @[UTTypeZIP, UTTypeFolder];
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types asCopy:YES];
     picker.delegate = self;
     picker.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     picker.modalPresentationStyle = UIModalPresentationFormSheet;
