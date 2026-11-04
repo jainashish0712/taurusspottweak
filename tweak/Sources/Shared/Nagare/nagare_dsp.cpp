@@ -700,6 +700,11 @@ public:
         return output;
     }
 
+    void reset() {
+        std::fill(buffer.begin(), buffer.end(), 0.0f);
+        pos = 0;
+    }
+
 private:
     std::vector<float> buffer;
     size_t pos;
@@ -717,6 +722,12 @@ public:
         buffer[pos] = input + filter * feedback;
         pos = (pos + 1) % buffer.size();
         return output;
+    }
+
+    void reset() {
+        std::fill(buffer.begin(), buffer.end(), 0.0f);
+        pos = 0;
+        filter = 0.0f;
     }
 
     void setFeedback(float fb) { feedback = fb; }
@@ -790,6 +801,13 @@ public:
             left[i] = out_l * wet1 + out_r * wet2 + input_l * dry;
             right[i] = out_r * wet1 + out_l * wet2 + input_r * dry;
         }
+    }
+
+    void reset() {
+        for (auto& comb : combs_l) comb.reset();
+        for (auto& comb : combs_r) comb.reset();
+        for (auto& ap : allpasses_l) ap.reset();
+        for (auto& ap : allpasses_r) ap.reset();
     }
 
 private:
@@ -1525,9 +1543,11 @@ public:
             //
             // V9 — also process while ramping out (current > epsilon) so the
             // toggle-off transition isn't a hard snap.
-            if (transient_shaper_enabled ||
-                std::abs(transient_attack_current)  > 1e-3f ||
-                std::abs(transient_sustain_current) > 1e-3f) {
+            if (transient_shaper_enabled &&
+                (std::abs(transient_attack_current)  > 1e-3f ||
+                 std::abs(transient_sustain_current) > 1e-3f ||
+                 std::abs(transient_attack_target)   > 1e-3f ||
+                 std::abs(transient_sustain_target)  > 1e-3f)) {
                 transient_shaper.process(left_ch, right_ch, num_frames);
             }
 
@@ -1571,9 +1591,8 @@ public:
                 compressor.process(left_ch, right_ch, num_frames);
             }
 
-            // 10. Reverb. V9 — process while ramping out too (wet > epsilon)
-            // so disabling room ambience fades cleanly instead of cutting.
-            if (reverb && (reverb_enabled || reverb_wet_current > 1e-3f)) {
+            // 10. Reverb. Strictly guarded by reverb_enabled to guarantee no leak.
+            if (reverb_enabled && reverb && (reverb_wet_current > 1e-3f || reverb_wet_target > 1e-3f)) {
                 reverb->process(left_ch, right_ch, num_frames);
             }
 
@@ -2219,11 +2238,31 @@ public:
     // and limiter still run because they are the safety/clean-up layer.
     void setChainBypass(bool enabled) { chain_bypass = enabled; }
 
-    void setStereoWidthEnabled(bool enabled) { stereo_width_enabled = enabled; }
-    void setStereoWidth(float width) { stereo_width_target = clamp_val(width, 0.0f, 2.0f); }
+    void setStereoWidthEnabled(bool enabled) {
+        stereo_width_enabled = enabled;
+        if (!enabled) {
+            stereo_width_target = 1.0f;
+            stereo_width = 1.0f;
+        }
+    }
+    void setStereoWidth(float width) {
+        float val = clamp_val(width, 0.0f, 2.0f);
+        if (stereo_width_enabled) stereo_width_target = val;
+        else stereo_width_target = 1.0f;
+    }
 
-    void setCrossfeedEnabled(bool enabled) { crossfeed_enabled = enabled; }
-    void setCrossfeed(float amount) { crossfeed_target = clamp_val(amount, 0.0f, 1.0f); }
+    void setCrossfeedEnabled(bool enabled) {
+        crossfeed_enabled = enabled;
+        if (!enabled) {
+            crossfeed_target = 0.0f;
+            crossfeed_amount = 0.0f;
+        }
+    }
+    void setCrossfeed(float amount) {
+        float val = clamp_val(amount, 0.0f, 1.0f);
+        if (crossfeed_enabled) crossfeed_target = val;
+        else crossfeed_target = 0.0f;
+    }
 
     void setVirtualBassEnabled(bool enabled) { virtual_bass_enabled = enabled; }
     void setVirtualBass(float amount, float freq) {
@@ -2296,28 +2335,60 @@ public:
         transient_shaper_enabled = enabled;
         if (!enabled) {
             transient_attack_target = 0.0f;
+            transient_attack_current = 0.0f;
             transient_sustain_target = 0.0f;
+            transient_sustain_current = 0.0f;
             transient_shaper.reset();
+        } else {
+            transient_attack_target = transient_attack_stored;
+            transient_sustain_target = transient_sustain_stored;
         }
     }
     void setTransientShaperParams(float attack, float sustain) {
-        transient_attack_target  = clamp_val(attack,  -1.0f, 1.0f);
-        transient_sustain_target = clamp_val(sustain, -1.0f, 1.0f);
+        transient_attack_stored  = clamp_val(attack,  -1.0f, 1.0f);
+        transient_sustain_stored = clamp_val(sustain, -1.0f, 1.0f);
+        if (transient_shaper_enabled) {
+            transient_attack_target  = transient_attack_stored;
+            transient_sustain_target = transient_sustain_stored;
+        } else {
+            transient_attack_target = 0.0f;
+            transient_attack_current = 0.0f;
+            transient_sustain_target = 0.0f;
+            transient_sustain_current = 0.0f;
+        }
     }
 
     void setReverbEnabled(bool enabled) {
         reverb_enabled = enabled;
-        if (!enabled) reverb_wet_target = 0.0f;
+        if (!enabled) {
+            reverb_wet_target = 0.0f;
+            reverb_wet_current = 0.0f;
+            reverb_dry_target = 1.0f;
+            reverb_dry_current = 1.0f;
+            if (reverb) reverb->reset();
+        } else {
+            reverb_wet_target = reverb_wet_stored;
+            reverb_dry_target = reverb_dry_stored;
+        }
     }
     // V9 — wet/dry targets are smoothed in process(); room_size/damping/width
     // still apply immediately (recomputing comb feedback every block is
     // expensive and these don't audibly snap on their own).
     void setReverb(float room_size, float damping, float wet, float dry, float width) {
-        reverb_wet_target = wet;
-        reverb_dry_target = dry;
         reverb_room_size_set = room_size;
         reverb_damping_set = damping;
         reverb_width_set = width;
+        reverb_wet_stored = wet;
+        reverb_dry_stored = dry;
+        if (reverb_enabled) {
+            reverb_wet_target = wet;
+            reverb_dry_target = dry;
+        } else {
+            reverb_wet_target = 0.0f;
+            reverb_wet_current = 0.0f;
+            reverb_dry_target = 1.0f;
+            reverb_dry_current = 1.0f;
+        }
         if (reverb) {
             // Apply current (not target) wet/dry so the actual change rides
             // the ramp; room_size/damping/width snap because comb state needs
@@ -2608,8 +2679,9 @@ public:
         setAirBandEnabled(false);
         setCompressorEnabled(false);
         setLimiterEnabled(false);
+        setTransientShaperEnabled(false);
+        setReverbEnabled(false);
         eq_enabled = false;
-        reverb_enabled = false;
     }
 
     void setSmartEnhance(bool enabled, float intensity) {
@@ -2742,6 +2814,7 @@ private:
     TransientShaper transient_shaper;
     float transient_attack_current = 0.0f, transient_attack_target = 0.0f;
     float transient_sustain_current = 0.0f, transient_sustain_target = 0.0f;
+    float transient_attack_stored = 0.0f, transient_sustain_stored = 0.0f;
 
     // V9 — reverb wet/dry levels ramp toward target over 20 ms. Other
     // reverb params (room_size, damping, width) still apply immediately
@@ -2755,6 +2828,7 @@ private:
     float reverb_room_size_set = 0.5f;
     float reverb_damping_set = 0.5f;
     float reverb_width_set = 1.0f;
+    float reverb_wet_stored = 0.2f, reverb_dry_stored = 0.8f;
 
     // V8.4 — scratch buffers used by oversampled saturators to hold the
     // pre-mix wet path so the dry signal isn't double-filtered.

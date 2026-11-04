@@ -76,14 +76,36 @@ void SGNagareSetCoreDSPEnabled(BOOL enabled);
 BOOL SGNagareIsCoreDSPEnabled(void);
 
 void SGNagareSetSmartEnhance(BOOL enabled, float intensity);
+BOOL SGNagareIsSmartEnhanceEnabled(void);
+float SGNagareGetSmartIntensity(void);
+
 void SGNagareSetVirtualBass(BOOL enabled, float amount, float freq);
+BOOL SGNagareIsVirtualBassEnabled(void);
+float SGNagareGetVirtualBassIntensity(void);
+
 void SGNagareSetSubharmonic(BOOL enabled, float amount);
+
 void SGNagareSetTubeWarmth(BOOL enabled, float amount, float drive);
+BOOL SGNagareIsTubeWarmthEnabled(void);
+float SGNagareGetTubeWarmthIntensity(void);
+
 void SGNagareSetExciter(BOOL enabled, float amount, float freq);
+BOOL SGNagareIsExciterEnabled(void);
+float SGNagareGetExciterIntensity(void);
+
 void SGNagareSetAirBand(BOOL enabled, float amount);
+
 void SGNagareSetStereoWidth(BOOL enabled, float width);
+BOOL SGNagareIsStereoWidthEnabled(void);
+float SGNagareGetStereoWidth(void);
+
 void SGNagareSetCrossfeed(BOOL enabled, float amount);
+BOOL SGNagareIsCrossfeedEnabled(void);
+float SGNagareGetCrossfeedAmount(void);
+
 void SGNagareSetReverb(BOOL enabled, float roomSize, float damping, float wet, float dry, float width);
+BOOL SGNagareIsReverbEnabled(void);
+float SGNagareGetReverbIntensity(void);
 void SGNagareSetTransientShaper(BOOL enabled, float attack, float sustain);
 void SGNagareSetLoudnessComp(BOOL enabled, float amount);
 void SGNagareSetEQEnabled(BOOL enabled);

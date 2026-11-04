@@ -1080,6 +1080,28 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 
     self.hrtfSwitch.on = SGNagareIsHRTFEnabled();
     self.hrtfAngleSlider.value = SGNagareGetHRTFAngle();
+
+    self.smartSwitch.on = SGNagareIsSmartEnhanceEnabled();
+    self.smartSlider.value = SGNagareGetSmartIntensity();
+
+    self.vibeSwitch.on = SGNagareIsVirtualBassEnabled();
+    self.vibeSlider.value = SGNagareGetVirtualBassIntensity();
+
+    self.tubeSwitch.on = SGNagareIsTubeWarmthEnabled();
+    self.tubeSlider.value = SGNagareGetTubeWarmthIntensity();
+
+    self.exciterSwitch.on = SGNagareIsExciterEnabled();
+    self.exciterSlider.value = SGNagareGetExciterIntensity();
+
+    self.stereoWidthSwitch.on = SGNagareIsStereoWidthEnabled();
+    self.stereoWidthSlider.value = MAX(0.0f, SGNagareGetStereoWidth() - 1.0f);
+
+    self.crossfeedSwitch.on = SGNagareIsCrossfeedEnabled();
+    self.crossfeedSlider.value = SGNagareGetCrossfeedAmount();
+
+    self.reverbSwitch.on = SGNagareIsReverbEnabled();
+    float revWet = SGNagareGetReverbIntensity();
+    self.reverbSlider.value = revWet > 0.0f ? (revWet / 0.4f) : 0.5f;
 }
 
 #pragma mark - Actions
@@ -1339,10 +1361,18 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     SGNagareSetHRTFAngle(sender.value);
 }
 
+- (void)updateCoreDSPState {
+    BOOL anyCoreActive = self.smartSwitch.isOn || self.vibeSwitch.isOn ||
+                         self.tubeSwitch.isOn || self.exciterSwitch.isOn ||
+                         self.stereoWidthSwitch.isOn || self.crossfeedSwitch.isOn ||
+                         self.reverbSwitch.isOn;
+    SGNagareSetCoreDSPEnabled(anyCoreActive);
+}
+
 // Core Chain
 - (void)smartToggled:(UISwitch *)sender {
-    SGNagareSetCoreDSPEnabled(YES);
     SGNagareSetSmartEnhance(sender.isOn, self.smartSlider.value);
+    [self updateCoreDSPState];
 }
 
 - (void)smartSliderMoved:(UISlider *)sender {
@@ -1350,8 +1380,8 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 }
 
 - (void)vibeToggled:(UISwitch *)sender {
-    SGNagareSetCoreDSPEnabled(YES);
     SGNagareSetVirtualBass(sender.isOn, self.vibeSlider.value, 120.0f);
+    [self updateCoreDSPState];
 }
 
 - (void)vibeSliderMoved:(UISlider *)sender {
@@ -1359,8 +1389,8 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 }
 
 - (void)tubeToggled:(UISwitch *)sender {
-    SGNagareSetCoreDSPEnabled(YES);
     SGNagareSetTubeWarmth(sender.isOn, self.tubeSlider.value, 0.4f);
+    [self updateCoreDSPState];
 }
 
 - (void)tubeSliderMoved:(UISlider *)sender {
@@ -1368,9 +1398,9 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 }
 
 - (void)exciterToggled:(UISwitch *)sender {
-    SGNagareSetCoreDSPEnabled(YES);
     SGNagareSetExciter(sender.isOn, self.exciterSlider.value, 4000.0f);
     SGNagareSetAirBand(sender.isOn, self.exciterSlider.value);
+    [self updateCoreDSPState];
 }
 
 - (void)exciterSliderMoved:(UISlider *)sender {
@@ -1379,30 +1409,34 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 }
 
 - (void)widthToggled:(UISwitch *)sender {
-    SGNagareSetCoreDSPEnabled(YES);
-    SGNagareSetStereoWidth(sender.isOn, 1.0f + sender.isOn * self.stereoWidthSlider.value);
+    SGNagareSetStereoWidth(sender.isOn, 1.0f + (sender.isOn ? self.stereoWidthSlider.value : 0.0f));
+    [self updateCoreDSPState];
 }
 
 - (void)widthSliderMoved:(UISlider *)sender {
-    SGNagareSetStereoWidth(self.stereoWidthSwitch.isOn, 1.0f + sender.value);
+    SGNagareSetStereoWidth(self.stereoWidthSwitch.isOn, 1.0f + (self.stereoWidthSwitch.isOn ? sender.value : 0.0f));
 }
 
 - (void)crossfeedToggled:(UISwitch *)sender {
-    SGNagareSetCoreDSPEnabled(YES);
-    SGNagareSetCrossfeed(sender.isOn, self.crossfeedSlider.value);
+    SGNagareSetCrossfeed(sender.isOn, sender.isOn ? self.crossfeedSlider.value : 0.0f);
+    [self updateCoreDSPState];
 }
 
 - (void)crossfeedSliderMoved:(UISlider *)sender {
-    SGNagareSetCrossfeed(self.crossfeedSwitch.isOn, sender.value);
+    SGNagareSetCrossfeed(self.crossfeedSwitch.isOn, self.crossfeedSwitch.isOn ? sender.value : 0.0f);
 }
 
 - (void)reverbToggled:(UISwitch *)sender {
-    SGNagareSetCoreDSPEnabled(YES);
-    SGNagareSetReverb(sender.isOn, 0.5f, 0.5f, self.reverbSlider.value * 0.4f, 1.0f - self.reverbSlider.value * 0.2f, 1.0f);
+    float wet = sender.isOn ? (self.reverbSlider.value * 0.4f) : 0.0f;
+    float dry = sender.isOn ? (1.0f - self.reverbSlider.value * 0.2f) : 1.0f;
+    SGNagareSetReverb(sender.isOn, 0.5f, 0.5f, wet, dry, 1.0f);
+    [self updateCoreDSPState];
 }
 
 - (void)reverbSliderMoved:(UISlider *)sender {
-    SGNagareSetReverb(self.reverbSwitch.isOn, 0.5f, 0.5f, sender.value * 0.4f, 1.0f - sender.value * 0.2f, 1.0f);
+    float wet = self.reverbSwitch.isOn ? (sender.value * 0.4f) : 0.0f;
+    float dry = self.reverbSwitch.isOn ? (1.0f - sender.value * 0.2f) : 1.0f;
+    SGNagareSetReverb(self.reverbSwitch.isOn, 0.5f, 0.5f, wet, dry, 1.0f);
 }
 
 @end

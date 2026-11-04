@@ -377,19 +377,21 @@ void applyAllDSPState() {
     nagare_crossfeed_enable(g_crossfeedEnabled.load(std::memory_order_relaxed));
     nagare_crossfeed_set(g_crossfeedAmount.load(std::memory_order_relaxed));
 
-    nagare_reverb_enable(g_reverbEnabled.load(std::memory_order_relaxed));
+    bool reverbOn = g_reverbEnabled.load(std::memory_order_relaxed);
+    nagare_reverb_enable(reverbOn);
     nagare_reverb_set(
         g_reverbRoom.load(std::memory_order_relaxed),
         g_reverbDamping.load(std::memory_order_relaxed),
-        g_reverbWet.load(std::memory_order_relaxed),
-        g_reverbDry.load(std::memory_order_relaxed),
+        reverbOn ? g_reverbWet.load(std::memory_order_relaxed) : 0.0f,
+        reverbOn ? g_reverbDry.load(std::memory_order_relaxed) : 1.0f,
         g_reverbWidth.load(std::memory_order_relaxed)
     );
 
-    nagare_transient_shaper_enable(g_transientEnabled.load(std::memory_order_relaxed));
+    bool transOn = g_transientEnabled.load(std::memory_order_relaxed);
+    nagare_transient_shaper_enable(transOn);
     nagare_transient_shaper_set(
-        g_transientAttack.load(std::memory_order_relaxed),
-        g_transientSustain.load(std::memory_order_relaxed)
+        transOn ? g_transientAttack.load(std::memory_order_relaxed) : 0.0f,
+        transOn ? g_transientSustain.load(std::memory_order_relaxed) : 0.0f
     );
 
     nagare_loudness_comp_enable(g_loudnessCompEnabled.load(std::memory_order_relaxed));
@@ -885,6 +887,14 @@ void SGNagareSetSmartEnhance(BOOL enabled, float intensity) {
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
 }
 
+BOOL SGNagareIsSmartEnhanceEnabled(void) {
+    return g_smartEnhanceEnabled.load(std::memory_order_relaxed);
+}
+
+float SGNagareGetSmartIntensity(void) {
+    return g_smartIntensity.load(std::memory_order_relaxed);
+}
+
 void SGNagareSetVirtualBass(BOOL enabled, float amount, float freq) {
     g_vibeEnabled.store(enabled, std::memory_order_relaxed);
     g_vibeAmount.store(amount, std::memory_order_relaxed);
@@ -895,6 +905,14 @@ void SGNagareSetVirtualBass(BOOL enabled, float amount, float freq) {
     [NSUserDefaults.standardUserDefaults setFloat:amount forKey:SGKeyNagareVirtualBassAmount];
     [NSUserDefaults.standardUserDefaults setFloat:freq forKey:SGKeyNagareVirtualBassFreq];
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
+}
+
+BOOL SGNagareIsVirtualBassEnabled(void) {
+    return g_vibeEnabled.load(std::memory_order_relaxed);
+}
+
+float SGNagareGetVirtualBassIntensity(void) {
+    return g_vibeAmount.load(std::memory_order_relaxed);
 }
 
 void SGNagareSetSubharmonic(BOOL enabled, float amount) {
@@ -914,6 +932,14 @@ void SGNagareSetTubeWarmth(BOOL enabled, float amount, float drive) {
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
 }
 
+BOOL SGNagareIsTubeWarmthEnabled(void) {
+    return g_tubeEnabled.load(std::memory_order_relaxed);
+}
+
+float SGNagareGetTubeWarmthIntensity(void) {
+    return g_tubeAmount.load(std::memory_order_relaxed);
+}
+
 void SGNagareSetExciter(BOOL enabled, float amount, float freq) {
     g_exciterEnabled.store(enabled, std::memory_order_relaxed);
     g_exciterAmount.store(amount, std::memory_order_relaxed);
@@ -924,6 +950,14 @@ void SGNagareSetExciter(BOOL enabled, float amount, float freq) {
     [NSUserDefaults.standardUserDefaults setFloat:amount forKey:SGKeyNagareExciterAmount];
     [NSUserDefaults.standardUserDefaults setFloat:freq forKey:SGKeyNagareExciterFreq];
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
+}
+
+BOOL SGNagareIsExciterEnabled(void) {
+    return g_exciterEnabled.load(std::memory_order_relaxed);
+}
+
+float SGNagareGetExciterIntensity(void) {
+    return g_exciterAmount.load(std::memory_order_relaxed);
 }
 
 void SGNagareSetAirBand(BOOL enabled, float amount) {
@@ -940,20 +974,36 @@ void SGNagareSetStereoWidth(BOOL enabled, float width) {
     g_stereoWidthEnabled.store(enabled, std::memory_order_relaxed);
     g_stereoWidthAmount.store(width, std::memory_order_relaxed);
     nagare_stereo_width_enable(enabled);
-    nagare_stereo_width_set(width);
+    nagare_stereo_width_set(enabled ? width : 1.0f);
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:SGKeyNagareStereoWidthEnabled];
     [NSUserDefaults.standardUserDefaults setFloat:width forKey:SGKeyNagareStereoWidthAmount];
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
+}
+
+BOOL SGNagareIsStereoWidthEnabled(void) {
+    return g_stereoWidthEnabled.load(std::memory_order_relaxed);
+}
+
+float SGNagareGetStereoWidth(void) {
+    return g_stereoWidthAmount.load(std::memory_order_relaxed);
 }
 
 void SGNagareSetCrossfeed(BOOL enabled, float amount) {
     g_crossfeedEnabled.store(enabled, std::memory_order_relaxed);
     g_crossfeedAmount.store(amount, std::memory_order_relaxed);
     nagare_crossfeed_enable(enabled);
-    nagare_crossfeed_set(amount);
+    nagare_crossfeed_set(enabled ? amount : 0.0f);
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:SGKeyNagareCrossfeedEnabled];
     [NSUserDefaults.standardUserDefaults setFloat:amount forKey:SGKeyNagareCrossfeedAmount];
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
+}
+
+BOOL SGNagareIsCrossfeedEnabled(void) {
+    return g_crossfeedEnabled.load(std::memory_order_relaxed);
+}
+
+float SGNagareGetCrossfeedAmount(void) {
+    return g_crossfeedAmount.load(std::memory_order_relaxed);
 }
 
 void SGNagareSetReverb(BOOL enabled, float roomSize, float damping, float wet, float dry, float width) {
@@ -964,9 +1014,17 @@ void SGNagareSetReverb(BOOL enabled, float roomSize, float damping, float wet, f
     g_reverbDry.store(dry, std::memory_order_relaxed);
     g_reverbWidth.store(width, std::memory_order_relaxed);
     nagare_reverb_enable(enabled);
-    nagare_reverb_set(roomSize, damping, wet, dry, width);
+    nagare_reverb_set(roomSize, damping, enabled ? wet : 0.0f, enabled ? dry : 1.0f, width);
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:SGKeyNagareReverbEnabled];
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
+}
+
+BOOL SGNagareIsReverbEnabled(void) {
+    return g_reverbEnabled.load(std::memory_order_relaxed);
+}
+
+float SGNagareGetReverbIntensity(void) {
+    return g_reverbWet.load(std::memory_order_relaxed);
 }
 
 void SGNagareSetTransientShaper(BOOL enabled, float attack, float sustain) {
