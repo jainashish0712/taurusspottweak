@@ -317,12 +317,20 @@ void applyAllDSPState() {
         currentMode = 6;
         g_stemMode.store(6, std::memory_order_relaxed);
     }
-    separator_enable(g_stemsEnabled.load(std::memory_order_relaxed));
+    bool stemsActive = g_stemsEnabled.load(std::memory_order_relaxed);
+    separator_enable(stemsActive);
+    spleeter_engine_set_enabled(stemsActive);
     separator_set_mode((SeparatorMode)currentMode);
     separator_set_stem_levels(
         g_stemVocals.load(std::memory_order_relaxed),
         g_stemBass.load(std::memory_order_relaxed),
         g_stemDrums.load(std::memory_order_relaxed),
+        g_stemOther.load(std::memory_order_relaxed)
+    );
+    spleeter_engine_set_stem_levels(
+        g_stemVocals.load(std::memory_order_relaxed),
+        g_stemDrums.load(std::memory_order_relaxed),
+        g_stemBass.load(std::memory_order_relaxed),
         g_stemOther.load(std::memory_order_relaxed)
     );
 
@@ -695,6 +703,7 @@ void SGNagareSetStemLevels(float vocals, float drums, float bass, float other) {
         if (!g_stemsEnabled.load(std::memory_order_relaxed)) {
             g_stemsEnabled.store(true, std::memory_order_release);
             separator_enable(true);
+            spleeter_engine_set_enabled(true);
         }
         if (separator_get_mode() == SEPARATOR_MODE_NORMAL) {
             separator_set_mode(SEPARATOR_MODE_CUSTOM);
@@ -727,6 +736,13 @@ void SGNagareGetStemMeters(float *vocals, float *drums, float *bass, float *othe
 void SGNagareSetSeparationMode(int mode) {
     g_stemMode.store(mode, std::memory_order_relaxed);
     separator_set_mode((SeparatorMode)mode);
+    if (mode != SEPARATOR_MODE_NORMAL) {
+        if (!g_stemsEnabled.load(std::memory_order_relaxed)) {
+            g_stemsEnabled.store(true, std::memory_order_release);
+            separator_enable(true);
+            spleeter_engine_set_enabled(true);
+        }
+    }
     [NSUserDefaults.standardUserDefaults setInteger:mode forKey:SGKeyNagareStemsMode];
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
 }

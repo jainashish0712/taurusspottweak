@@ -1259,11 +1259,9 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     self.bassLabel.text = [NSString stringWithFormat:@"%.0f%%", b * 100];
     self.otherLabel.text = [NSString stringWithFormat:@"%.0f%%", o * 100];
 
+    SGNagareSetStemsEnabled(YES);
+    [self.stemsMasterSwitch setOn:YES animated:YES];
     SGNagareSetStemLevels(v, d, b, o);
-    if (!self.stemsMasterSwitch.isOn) {
-        [self.stemsMasterSwitch setOn:YES animated:YES];
-        SGNagareSetStemsEnabled(YES);
-    }
 }
 
 - (void)vocalsSliderMoved:(UISlider *)sender {

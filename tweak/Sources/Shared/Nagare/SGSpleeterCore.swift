@@ -305,22 +305,10 @@ public actor SGSpleeterSeparator {
 
                 for f in 0..<freqBins {
                     let idx = chOffset + f * SGSpleeterSTFT.timeFrames + t
-                    let vm = vPtr[idx]
-                    let dm = dPtr[idx]
-                    let bm = bPtr[idx]
-                    let om = oPtr[idx]
-
-                    let vm2 = vm * vm
-                    let dm2 = dm * dm
-                    let bm2 = bm * bm
-                    let om2 = om * om
-                    let sumSq = vm2 + dm2 + bm2 + om2 + epsilon
-
-                    // Spleeter exact ratio masks (guarantees sum == 1.0)
-                    let rv = (vm2 + epsQuarter) / sumSq
-                    let rd = (dm2 + epsQuarter) / sumSq
-                    let rb = (bm2 + epsQuarter) / sumSq
-                    let ro = (om2 + epsQuarter) / sumSq
+                    let rv = max(0.0, min(1.0, vPtr[idx]))
+                    let rd = max(0.0, min(1.0, dPtr[idx]))
+                    let rb = max(0.0, min(1.0, bPtr[idx]))
+                    let ro = max(0.0, min(1.0, oPtr[idx]))
 
                     let r = rSlice[f]
                     let i = iSlice[f]

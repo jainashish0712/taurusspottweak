@@ -6,7 +6,10 @@
 
 #import "SGSpleeterModelManager.h"
 #import "miniz/miniz.h"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
 #include "miniz/miniz.c"
+#pragma clang diagnostic pop
 #import <CommonCrypto/CommonDigest.h>
 
 NSNotificationName const SGSpleeterModelStatusDidChangeNotification = @"spotifyglass.spleeter.modelStatusChanged";
@@ -177,6 +180,7 @@ static BOOL SGExtractZipArchive(NSString *zipPath, NSString *destinationDirector
         self.state = SGSpleeterModelStateReady;
         self.downloadProgress = 1.0f;
         self.statusMessage = @"Spleeter 4-Stem Model Ready";
+        [self notifyStatusChange];
         return;
     }
 

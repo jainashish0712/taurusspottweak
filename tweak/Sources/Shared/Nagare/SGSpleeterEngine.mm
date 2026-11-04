@@ -6,6 +6,7 @@
 
 #import "SGSpleeterEngine.h"
 #import "SGSpleeterModelManager.h"
+#include "source_separator.h"
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -211,7 +212,8 @@ void spleeter_engine_process(float* left, float* right, int num_frames) {
 
     uint32_t available = g_ring.availableToRead();
     if (available < (uint32_t)num_frames) {
-        // Lookahead buffering in progress: pass through original audio cleanly
+        // Lookahead buffering in progress: run real-time DSP separator so stems change instantly
+        separator_process(left, right, num_frames);
         return;
     }
 
