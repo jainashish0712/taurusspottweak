@@ -57,25 +57,12 @@ struct SGSpleeterRingBuffer {
 static SGSpleeterRingBuffer g_ring;
 static std::atomic<bool> g_enabled{false};
 static std::atomic<bool> g_workerActive{false};
-static int g_sampleRate = 44100;
 
 // Target stem gains
 static std::atomic<float> g_targetVocals{1.0f};
 static std::atomic<float> g_targetDrums{1.0f};
 static std::atomic<float> g_targetBass{1.0f};
 static std::atomic<float> g_targetOther{1.0f};
-
-// Smoothed faders (render thread only)
-static float s_smoothVocals = 1.0f;
-static float s_smoothDrums = 1.0f;
-static float s_smoothBass = 1.0f;
-static float s_smoothOther = 1.0f;
-
-// RMS meter envelopes
-static std::atomic<float> g_meterVocals{0.0f};
-static std::atomic<float> g_meterDrums{0.0f};
-static std::atomic<float> g_meterBass{0.0f};
-static std::atomic<float> g_meterOther{0.0f};
 
 static id s_modelObserver = nil;
 
@@ -118,7 +105,7 @@ static void try_start_worker() {
 }
 
 int spleeter_engine_init(int sample_rate) {
-    g_sampleRate = sample_rate > 0 ? sample_rate : 44100;
+    (void)sample_rate;
     g_ring.init();
 
     if (!s_modelObserver) {
@@ -187,10 +174,6 @@ void spleeter_engine_clear(void) {
     SGSpleeterWorkerReset();
     g_ring.clear();
     separator_clear();
-    g_meterVocals.store(0.0f, std::memory_order_relaxed);
-    g_meterDrums.store(0.0f, std::memory_order_relaxed);
-    g_meterBass.store(0.0f, std::memory_order_relaxed);
-    g_meterOther.store(0.0f, std::memory_order_relaxed);
 }
 
 void spleeter_engine_reload(void) {

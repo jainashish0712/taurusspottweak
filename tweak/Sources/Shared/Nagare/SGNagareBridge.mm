@@ -1027,6 +1027,7 @@ void SGNagareGetFFTMagnitudes(float *output, int fftSize) {
 }
 
 - (void)handleSeek:(NSNotification *)note {
+    (void)note;
     spleeter_engine_clear();
     separator_clear();
 }
