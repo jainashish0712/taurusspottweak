@@ -136,6 +136,7 @@ void spleeter_engine_release(void) {
 
 void spleeter_engine_set_enabled(bool enabled) {
     g_enabled.store(enabled, std::memory_order_release);
+    separator_enable(enabled);
     if (enabled) {
         try_start_worker();
     } else {
@@ -156,6 +157,7 @@ void spleeter_engine_set_stem_levels(float vocals, float drums, float bass, floa
     g_targetDrums.store(std::max(0.0f, std::min(2.0f, drums)), std::memory_order_relaxed);
     g_targetBass.store(std::max(0.0f, std::min(2.0f, bass)), std::memory_order_relaxed);
     g_targetOther.store(std::max(0.0f, std::min(2.0f, other)), std::memory_order_relaxed);
+    separator_set_stem_levels(vocals, bass, drums, other);
 }
 
 void spleeter_engine_get_stem_levels(float* vocals, float* drums, float* bass, float* other) {

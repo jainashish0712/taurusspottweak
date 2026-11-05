@@ -48,9 +48,9 @@ static constexpr float PI = 3.14159265358979323846f;
 static constexpr float TWO_PI = 2.0f * PI;
 
 // Frequency ranges (in bins at 44.1kHz with 2048 FFT)
-static constexpr int BASS_CUTOFF_BIN = 10;     // ~215 Hz
-static constexpr int VOCAL_LOW_BIN = 15;       // ~322 Hz
-static constexpr int VOCAL_HIGH_BIN = 400;     // ~8.6 kHz
+static constexpr int BASS_CUTOFF_BIN = 6;      // ~130 Hz
+static constexpr int VOCAL_LOW_BIN = 5;        // ~107 Hz
+static constexpr int VOCAL_HIGH_BIN = 460;     // ~9.9 kHz
 
 // ============================================================================
 // State
@@ -215,33 +215,33 @@ static void ms_to_stereo(float* m_real, float* m_imag, float* s_real, float* s_i
 static void apply_karaoke(SeparatorState& s) {
     int half = FFT_SIZE / 2;
     float strength = s.vocal_removal_strength;
-    float width = s.center_width;
 
     for (int i = 0; i < half; i++) {
         // Only process vocal frequency range
         if (i >= VOCAL_LOW_BIN && i <= VOCAL_HIGH_BIN) {
-            // Calculate how "center-panned" this frequency is
             float mid_mag = get_magnitude(s.mid_real[i], s.mid_imag[i]);
             float side_mag = get_magnitude(s.side_real[i], s.side_imag[i]);
 
-            float total = mid_mag + side_mag + 0.0001f;
-            float center_ratio = mid_mag / total;
+            // Center dominance ratio: excess of mid over side
+            float center_ratio = (mid_mag > side_mag) ? (mid_mag - side_mag) / (mid_mag + 1e-6f) : 0.0f;
+            float vocal_attenuation = std::max(0.0f, 1.0f - (strength * std::min(1.0f, center_ratio * 1.5f)));
 
-            // If center-panned (vocal), reduce mid channel
-            if (center_ratio > (1.0f - width) * 0.5f) {
-                float reduction = 1.0f - (strength * center_ratio);
-                reduction = std::max(0.0f, reduction);
+            s.mid_real[i] *= vocal_attenuation;
+            s.mid_imag[i] *= vocal_attenuation;
 
-                s.mid_real[i] *= reduction;
-                s.mid_imag[i] *= reduction;
-            }
+            // Also attenuate vocal reverb in side channel
+            float side_reverb_att = 1.0f - (strength * center_ratio * 0.75f);
+            s.side_real[i] *= std::max(0.05f, side_reverb_att);
+            s.side_imag[i] *= std::max(0.05f, side_reverb_att);
         }
     }
 
-    // Mirror for negative frequencies
+    // Mirror for negative frequencies (both Mid and Side)
     for (int i = 1; i < half; i++) {
         s.mid_real[FFT_SIZE - i] = s.mid_real[i];
         s.mid_imag[FFT_SIZE - i] = -s.mid_imag[i];
+        s.side_real[FFT_SIZE - i] = s.side_real[i];
+        s.side_imag[FFT_SIZE - i] = -s.side_imag[i];
     }
 }
 
@@ -252,24 +252,27 @@ static void apply_vocals_only(SeparatorState& s) {
 
     for (int i = 0; i < half; i++) {
         if (i >= VOCAL_LOW_BIN && i <= VOCAL_HIGH_BIN) {
-            // Keep mid, remove side
             float mid_mag = get_magnitude(s.mid_real[i], s.mid_imag[i]);
             float side_mag = get_magnitude(s.side_real[i], s.side_imag[i]);
 
-            float total = mid_mag + side_mag + 0.0001f;
-            float center_ratio = mid_mag / total;
+            float center_ratio = (mid_mag > side_mag) ? (mid_mag - side_mag) / (mid_mag + 1e-6f) : 0.0f;
+            float vocal_gain = std::min(1.0f, center_ratio * 1.5f);
 
-            // Reduce side channel for center-panned content
-            float side_reduction = strength * center_ratio;
-            s.side_real[i] *= (1.0f - side_reduction);
-            s.side_imag[i] *= (1.0f - side_reduction);
+            // Mid keeps only center vocal component
+            s.mid_real[i] *= vocal_gain;
+            s.mid_imag[i] *= vocal_gain;
+
+            // Suppress side instruments heavily
+            float side_reverb_gain = center_ratio * 0.4f;
+            s.side_real[i] *= side_reverb_gain;
+            s.side_imag[i] *= side_reverb_gain;
         } else {
-            // Outside vocal range: reduce both
-            float reduction = 1.0f - strength * 0.7f;
-            s.mid_real[i] *= reduction;
-            s.mid_imag[i] *= reduction;
-            s.side_real[i] *= reduction;
-            s.side_imag[i] *= reduction;
+            // Outside vocal range: attenuate
+            float low_high_gain = std::max(0.0f, 1.0f - strength * 0.9f);
+            s.mid_real[i] *= low_high_gain;
+            s.mid_imag[i] *= low_high_gain;
+            s.side_real[i] *= low_high_gain;
+            s.side_imag[i] *= low_high_gain;
         }
     }
 
@@ -354,30 +357,32 @@ static void apply_custom_mix(SeparatorState& s) {
     int half = FFT_SIZE / 2;
 
     for (int i = 0; i < half; i++) {
-        // 1. Bass crossover: smooth cosine transition between bin 6 (~130 Hz) and bin 12 (~260 Hz)
+        // 1. Bass crossover: smooth cosine transition between bin 4 (~86 Hz) and bin 8 (~172 Hz)
         float bass_weight = 0.0f;
-        if (i <= 6) {
+        if (i <= 4) {
             bass_weight = 1.0f;
-        } else if (i < 12) {
-            float t = (float)(i - 6) / 6.0f;
+        } else if (i < 8) {
+            float t = (float)(i - 4) / 4.0f;
             bass_weight = 0.5f * (1.0f + cosf(PI * t));
         }
 
-        // 2. Vocal vs Other separation in mid/high frequencies
+        // 2. Vocal vs Other separation via center dominance (excess of Mid over Side)
         float mid_mag = get_magnitude(s.mid_real[i], s.mid_imag[i]);
         float side_mag = get_magnitude(s.side_real[i], s.side_imag[i]);
-        float total = mid_mag + side_mag + 1e-6f;
-        float center_ratio = mid_mag / total; // 0.0 (wide stereo) to 1.0 (exact center)
+        float center_ratio = (mid_mag > side_mag) ? (mid_mag - side_mag) / (mid_mag + 1e-6f) : 0.0f;
 
-        // Cubic power-mask for vocal isolation (eliminates instrument bleed into vocal stem)
         float vocal_mask = 0.0f;
-        if (i >= 12 && i <= 380) { // ~260 Hz to ~8.2 kHz
-            vocal_mask = powf(center_ratio, 3.0f);
+        if (i >= 5 && i <= 460) { // ~107 Hz to ~9.9 kHz
+            vocal_mask = std::min(1.0f, center_ratio * 1.5f);
         }
 
         // Base gains for Mid and Side channels
         float mid_base_gain = vocal_mask * s.vocal_level + (1.0f - vocal_mask) * s.other_level;
-        float side_base_gain = s.other_level;
+
+        // Attenuate side channel vocal reverb proportionally to vocal cut and center presence
+        float vocal_cut = std::max(0.0f, 1.0f - s.vocal_level);
+        float side_vocal_reverb_att = 1.0f - (vocal_cut * center_ratio * 0.75f);
+        float side_base_gain = s.other_level * std::max(0.05f, side_vocal_reverb_att);
 
         // Blend with bass stem
         float mid_combined = bass_weight * s.bass_level + (1.0f - bass_weight) * mid_base_gain;
@@ -391,9 +396,13 @@ static void apply_custom_mix(SeparatorState& s) {
         float flux = std::max(0.0f, avg_mag - prev_mag);
         float transient = std::min(1.0f, flux / (prev_mag + 0.05f));
 
+        // Transient guarding: if center-dominated (vocal plosive/consonant), guard against drum leak
+        float eff_drum_mid = (center_ratio < 0.3f) ? s.drums_level : std::min(s.drums_level, s.vocal_level);
+        float eff_drum_side = s.drums_level;
+
         // Effective gains for Mid and Side
-        float eff_mid = (1.0f - transient) * mid_combined + transient * s.drums_level;
-        float eff_side = (1.0f - transient) * side_combined + transient * s.drums_level;
+        float eff_mid = (1.0f - transient) * mid_combined + transient * eff_drum_mid;
+        float eff_side = (1.0f - transient) * side_combined + transient * eff_drum_side;
 
         s.mid_real[i] *= eff_mid;
         s.mid_imag[i] *= eff_mid;
@@ -405,7 +414,7 @@ static void apply_custom_mix(SeparatorState& s) {
         s.prev_mag_r[i] = 0.6f * s.prev_mag_r[i] + 0.4f * mag_r;
     }
 
-    // Mirror
+    // Mirror for negative frequencies
     for (int i = 1; i < half; i++) {
         s.mid_real[FFT_SIZE - i] = s.mid_real[i];
         s.mid_imag[FFT_SIZE - i] = -s.mid_imag[i];
@@ -423,11 +432,11 @@ static void update_meters(SeparatorState& s) {
         float mid_mag = get_magnitude(s.mid_real[i], s.mid_imag[i]);
         float side_mag = get_magnitude(s.side_real[i], s.side_imag[i]);
 
-        if (i < 12) {
+        if (i < 8) {
             bass += mid_mag + side_mag;
-        } else if (i >= 12 && i <= 380) {
-            float total = mid_mag + side_mag + 1e-6f;
-            float v_mask = powf(mid_mag / total, 3.0f);
+        } else if (i >= 8 && i <= 460) {
+            float center_ratio = (mid_mag > side_mag) ? (mid_mag - side_mag) / (mid_mag + 1e-6f) : 0.0f;
+            float v_mask = std::min(1.0f, center_ratio * 1.5f);
             vocals += mid_mag * v_mask;
             other += side_mag + mid_mag * (1.0f - v_mask);
         } else {
@@ -442,7 +451,7 @@ static void update_meters(SeparatorState& s) {
     // Normalize and smooth (approx 0.0 - 1.0 scale)
     float norm = 1.0f / (half * 0.1f + 1e-5f);
     s.meter_vocals = s.meter_vocals * 0.85f + std::min(1.0f, vocals * norm * 0.4f) * 0.15f;
-    s.meter_bass = s.meter_bass * 0.85f + std::min(1.0f, bass * (1.0f / 12.0f) * 0.3f) * 0.15f;
+    s.meter_bass = s.meter_bass * 0.85f + std::min(1.0f, bass * (1.0f / 8.0f) * 0.3f) * 0.15f;
     s.meter_drums = s.meter_drums * 0.85f + std::min(1.0f, drums * norm * 1.5f) * 0.15f;
     s.meter_other = s.meter_other * 0.85f + std::min(1.0f, other * norm * 0.3f) * 0.15f;
 }
