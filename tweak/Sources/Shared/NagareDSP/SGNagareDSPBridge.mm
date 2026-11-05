@@ -498,7 +498,7 @@ void SGNagareDSPInit(double sampleRate) {
         }
         if (g_airBandEnabled.load(std::memory_order_relaxed)) {
             nagare_air_band_enable(true);
-            nagare_air_band_set_amount(g_airBandAmount.load(std::memory_order_relaxed));
+            nagare_air_band_set(g_airBandAmount.load(std::memory_order_relaxed));
         }
         if (g_stereoWidthEnabled.load(std::memory_order_relaxed)) {
             nagare_stereo_width_enable(true);
@@ -506,29 +506,30 @@ void SGNagareDSPInit(double sampleRate) {
         }
         if (g_crossfeedEnabled.load(std::memory_order_relaxed)) {
             nagare_crossfeed_enable(true);
-            nagare_crossfeed_set_level(g_crossfeedAmount.load(std::memory_order_relaxed));
+            nagare_crossfeed_set(g_crossfeedAmount.load(std::memory_order_relaxed));
         }
         if (g_reverbEnabled.load(std::memory_order_relaxed)) {
             nagare_reverb_enable(true);
-            nagare_reverb_set_parameters(g_reverbRoom.load(std::memory_order_relaxed),
-                                         g_reverbDamping.load(std::memory_order_relaxed),
-                                         g_reverbWet.load(std::memory_order_relaxed),
-                                         g_reverbDry.load(std::memory_order_relaxed),
-                                         g_reverbWidth.load(std::memory_order_relaxed));
+            nagare_reverb_set(g_reverbRoom.load(std::memory_order_relaxed),
+                              g_reverbDamping.load(std::memory_order_relaxed),
+                              g_reverbWet.load(std::memory_order_relaxed),
+                              g_reverbDry.load(std::memory_order_relaxed),
+                              g_reverbWidth.load(std::memory_order_relaxed));
         }
         if (g_transientEnabled.load(std::memory_order_relaxed)) {
             nagare_transient_shaper_enable(true);
             nagare_transient_shaper_set(g_transientAttack.load(std::memory_order_relaxed), g_transientSustain.load(std::memory_order_relaxed));
         }
         if (g_loudnessCompEnabled.load(std::memory_order_relaxed)) {
-            nagare_loudness_compensation_enable(true);
+            nagare_loudness_comp_enable(true);
+            nagare_loudness_comp_set(g_loudnessCompAmount.load(std::memory_order_relaxed));
         }
     }
 
     if (g_upscalerEnabled.load(std::memory_order_relaxed)) {
         upscaler_enable(true);
         upscaler_set_intensity(g_upscalerIntensity.load(std::memory_order_relaxed));
-        upscaler_set_cutoff(g_upscalerCutoff.load(std::memory_order_relaxed));
+        upscaler_set_sbr_cutoff(g_upscalerCutoff.load(std::memory_order_relaxed));
     }
     if (g_restorerEnabled.load(std::memory_order_relaxed)) {
         restorer_enable(true);
@@ -538,8 +539,8 @@ void SGNagareDSPInit(double sampleRate) {
     }
     if (g_hrtfEnabled.load(std::memory_order_relaxed)) {
         hrtf_enable(true);
-        hrtf_set_source_angle(g_hrtfAngle.load(std::memory_order_relaxed));
-        hrtf_set_profile((HRTFPreset)g_hrtfPreset.load(std::memory_order_relaxed));
+        hrtf_set_speaker_angle(g_hrtfAngle.load(std::memory_order_relaxed));
+        hrtf_set_preset(g_hrtfPreset.load(std::memory_order_relaxed));
         hrtf_set_room_size(g_hrtfRoom.load(std::memory_order_relaxed));
         hrtf_set_distance(g_hrtfDistance.load(std::memory_order_relaxed));
     }
@@ -594,7 +595,7 @@ float SGNagareGetUpscalerIntensity(void) {
 void SGNagareSetUpscalerCutoff(float cutoffHz) {
     cutoffHz = std::max(4000.0f, std::min(22000.0f, cutoffHz));
     g_upscalerCutoff.store(cutoffHz, std::memory_order_relaxed);
-    upscaler_set_cutoff(cutoffHz);
+    upscaler_set_sbr_cutoff(cutoffHz);
     [NSUserDefaults.standardUserDefaults setFloat:cutoffHz forKey:SGKeyNagareUpscalerCutoff];
 }
 
@@ -654,7 +655,7 @@ BOOL SGNagareIsHRTFEnabled(void) {
 void SGNagareSetHRTFAngle(float angleDegrees) {
     angleDegrees = std::max(-90.0f, std::min(90.0f, angleDegrees));
     g_hrtfAngle.store(angleDegrees, std::memory_order_relaxed);
-    hrtf_set_source_angle(angleDegrees);
+    hrtf_set_speaker_angle(angleDegrees);
     [NSUserDefaults.standardUserDefaults setFloat:angleDegrees forKey:SGKeyNagareHRTFAngle];
 }
 
@@ -664,7 +665,7 @@ float SGNagareGetHRTFAngle(void) {
 
 void SGNagareSetHRTFPreset(int preset) {
     g_hrtfPreset.store(preset, std::memory_order_relaxed);
-    hrtf_set_profile((HRTFPreset)preset);
+    hrtf_set_preset(preset);
     [NSUserDefaults.standardUserDefaults setInteger:preset forKey:SGKeyNagareHRTFPreset];
 }
 
@@ -695,7 +696,7 @@ void SGNagareSetCoreDSPEnabled(BOOL enabled) {
         nagare_crossfeed_enable(false);
         nagare_reverb_enable(false);
         nagare_transient_shaper_enable(false);
-        nagare_loudness_compensation_enable(false);
+        nagare_loudness_comp_enable(false);
     } else {
         if (g_smartEnhanceEnabled.load(std::memory_order_relaxed)) nagare_smart_enhance_enable(true);
         if (g_vibeEnabled.load(std::memory_order_relaxed)) nagare_virtual_bass_enable(true);
@@ -706,7 +707,7 @@ void SGNagareSetCoreDSPEnabled(BOOL enabled) {
         if (g_crossfeedEnabled.load(std::memory_order_relaxed)) nagare_crossfeed_enable(true);
         if (g_reverbEnabled.load(std::memory_order_relaxed)) nagare_reverb_enable(true);
         if (g_transientEnabled.load(std::memory_order_relaxed)) nagare_transient_shaper_enable(true);
-        if (g_loudnessCompEnabled.load(std::memory_order_relaxed)) nagare_loudness_compensation_enable(true);
+        if (g_loudnessCompEnabled.load(std::memory_order_relaxed)) nagare_loudness_comp_enable(true);
     }
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:SGKeyNagareCoreEnabled];
     [NSNotificationCenter.defaultCenter postNotificationName:SGNagareSettingsDidChangeNotification object:nil];
@@ -767,8 +768,8 @@ float SGNagareGetVirtualBassIntensity(void) {
 
 void SGNagareSetSubharmonic(BOOL enabled, float amount) {
     amount = std::max(0.0f, std::min(1.0f, amount));
-    nagare_subharmonic_synth_enable(enabled);
-    nagare_subharmonic_synth_set_amount(amount);
+    nagare_subharmonic_enable(enabled);
+    nagare_subharmonic_set(amount);
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:SGKeyNagareSubharmonicEnabled];
     [NSUserDefaults.standardUserDefaults setFloat:amount forKey:SGKeyNagareSubharmonicAmount];
 }
@@ -830,7 +831,7 @@ void SGNagareSetAirBand(BOOL enabled, float amount) {
     g_airBandEnabled.store(enabled, std::memory_order_relaxed);
     g_airBandAmount.store(amount, std::memory_order_relaxed);
     nagare_air_band_enable(enabled);
-    nagare_air_band_set_amount(amount);
+    nagare_air_band_set(amount);
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:SGKeyNagareAirBandEnabled];
     [NSUserDefaults.standardUserDefaults setFloat:amount forKey:SGKeyNagareAirBandAmount];
 }
@@ -863,7 +864,7 @@ void SGNagareSetCrossfeed(BOOL enabled, float amount) {
     g_crossfeedEnabled.store(enabled, std::memory_order_relaxed);
     g_crossfeedAmount.store(amount, std::memory_order_relaxed);
     nagare_crossfeed_enable(enabled);
-    nagare_crossfeed_set_level(amount);
+    nagare_crossfeed_set(amount);
     if (enabled && !g_coreDSPEnabled.load(std::memory_order_relaxed)) {
         g_coreDSPEnabled.store(true, std::memory_order_release);
         [NSUserDefaults.standardUserDefaults setBool:true forKey:SGKeyNagareCoreEnabled];
@@ -896,7 +897,7 @@ void SGNagareSetReverb(BOOL enabled, float roomSize, float damping, float wet, f
     g_reverbWidth.store(width, std::memory_order_relaxed);
 
     nagare_reverb_enable(enabled);
-    nagare_reverb_set_parameters(roomSize, damping, wet, dry, width);
+    nagare_reverb_set(roomSize, damping, wet, dry, width);
     if (enabled && !g_coreDSPEnabled.load(std::memory_order_relaxed)) {
         g_coreDSPEnabled.store(true, std::memory_order_release);
         [NSUserDefaults.standardUserDefaults setBool:true forKey:SGKeyNagareCoreEnabled];
@@ -934,7 +935,8 @@ void SGNagareSetTransientShaper(BOOL enabled, float attack, float sustain) {
 void SGNagareSetLoudnessComp(BOOL enabled, float amount) {
     amount = std::max(0.0f, std::min(1.0f, amount));
     g_loudnessCompEnabled.store(enabled, std::memory_order_relaxed);
-    nagare_loudness_compensation_enable(enabled);
+    nagare_loudness_comp_enable(enabled);
+    nagare_loudness_comp_set(amount);
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:SGKeyNagareLoudnessCompEnabled];
     [NSUserDefaults.standardUserDefaults setFloat:amount forKey:SGKeyNagareLoudnessCompAmount];
 }

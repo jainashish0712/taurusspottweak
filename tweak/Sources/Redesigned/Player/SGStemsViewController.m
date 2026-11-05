@@ -10,6 +10,7 @@
 #import "Shared/Stems/SGStemsBridge.h"
 #import "Shared/Stems/SGSpleeterModelManager.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <QuartzCore/QuartzCore.h>
 #import <math.h>
 #import <mach/mach.h>
 #import <dlfcn.h>
@@ -17,6 +18,7 @@
 static const CGFloat kPadding = 18.0;
 
 @interface SGStemsViewController () <UIScrollViewDelegate, UIDocumentPickerDelegate>
+@property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) UILabel *modelDetailLabel;
 @property (nonatomic, strong) UIButton *importModelButton;
 @property (nonatomic, strong) UIButton *downloadURLButton;
@@ -305,6 +307,7 @@ static NSInteger SegmentIndexFromSGStemsMode(int mode) {
     UIView *header = [[UIView alloc] init];
     header.translatesAutoresizingMaskIntoConstraints = NO;
     [self.blurView.contentView addSubview:header];
+    self.headerView = header;
 
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -375,11 +378,8 @@ static NSInteger SegmentIndexFromSGStemsMode(int mode) {
     self.contentStack.layoutMarginsRelativeArrangement = YES;
     [self.scrollView addSubview:self.contentStack];
 
-    // Find the header view for layout anchoring
-    UIView *header = self.blurView.contentView.subviews.firstObject;
-
     [NSLayoutConstraint activateConstraints:@[
-        [self.scrollView.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:10],
+        [self.scrollView.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:10],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.blurView.contentView.leadingAnchor],
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.blurView.contentView.trailingAnchor],
         [self.scrollView.bottomAnchor constraintEqualToAnchor:self.blurView.contentView.bottomAnchor],

@@ -8,6 +8,7 @@
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Shared/NagareDSP/SGNagareDSPBridge.h"
+#import <QuartzCore/QuartzCore.h>
 #import <math.h>
 #import <mach/mach.h>
 #import <dlfcn.h>

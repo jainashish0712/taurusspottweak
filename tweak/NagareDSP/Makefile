@@ -8,7 +8,12 @@ TWEAK_NAME := NagareDSP
 
 NagareDSP_FILES := $(wildcard ../Sources/Shared/NagareDSP/*.cpp) \
                    $(wildcard ../Sources/Shared/NagareDSP/*.mm) \
-                   ../Sources/Redesigned/Player/SGNagareDSPViewController.m
+                   ../Sources/Redesigned/Player/SGNagareDSPViewController.m \
+                   ../Sources/Redesigned/Kit/SGRTokens.m \
+                   ../Sources/Redesigned/Kit/SGRAccent.m \
+                   ../Sources/Core/SGLog.m \
+                   ../Sources/Core/SGPrefs.m \
+                   ../Sources/Shared/Audio/SGAudioPipeline.x
 
 NagareDSP_CFLAGS := -fobjc-arc -std=c++17 -I../Sources -I../Sources/Shared/NagareDSP
 NagareDSP_FRAMEWORKS := UIKit QuartzCore AudioToolbox Accelerate
