@@ -1,0 +1,9 @@
+Package: com.spoti.pw.nagaredsp
+Name: NagareDSP
+Architecture: iphoneos-arm
+Description: Audiophile Real-Time DSP Mastering Suite for Spotify
+Maintainer: Taurus
+Author: Taurus
+Section: Tweaks
+Depends: mobilesubstrate
+Version: 1.0.0

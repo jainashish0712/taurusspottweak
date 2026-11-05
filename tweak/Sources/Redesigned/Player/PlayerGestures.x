@@ -1,10 +1,10 @@
 #import "Core/SGCore.h"
 #import "Shared/Gestures/Gestures.h"
 #import "Shared/Haptics/Haptics.h"
-#import "Shared/AudioEffects/AudioEffectsPage.h"
 #import "Settings/SGPageStyle.h"
 #import "Player.h"
-#import "SGRStemsViewController.h"
+#import "SGStemsViewController.h"
+#import "SGNagareDSPViewController.h"
 #import <objc/runtime.h>
 
 
@@ -33,15 +33,6 @@
         v = v.superview;
     }
     return YES;
-}
-@end
-
-@interface SGRAudioEffectsNavController : UINavigationController
-@end
-
-@implementation SGRAudioEffectsNavController
-- (void)sgr_dismiss {
-    [self dismissViewControllerAnimated:YES completion:nil];
 }
 @end
 
@@ -80,7 +71,7 @@ static char kSGRAudioEffectsEdgeGestureKey;
     if (recognizer.state == UIGestureRecognizerStateBegan) {
         if (((UIViewController *)self).presentedViewController) return;
         SGPlayFeedback(SGFeedbackGrab);
-        [SGRStemsViewController presentFromCurrentPlayer];
+        [SGStemsViewController presentFromCurrentPlayer];
     }
 }
 
@@ -89,30 +80,7 @@ static char kSGRAudioEffectsEdgeGestureKey;
     if (recognizer.state == UIGestureRecognizerStateBegan) {
         if (((UIViewController *)self).presentedViewController) return;
         SGPlayFeedback(SGFeedbackGrab);
-        UIViewController *topVC = SGTopController() ?: (UIViewController *)self;
-        if (!topVC) return;
-
-        UIViewController *page = SGDSPSettingsPage();
-        if (!page) return;
-
-        SGRAudioEffectsNavController *nav = [[SGRAudioEffectsNavController alloc] initWithRootViewController:page];
-        nav.modalPresentationStyle = UIModalPresentationPageSheet;
-        nav.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-        nav.navigationBar.tintColor = UIColor.whiteColor;
-        if (@available(iOS 15.0, *)) {
-            UISheetPresentationController *sheet = nav.sheetPresentationController;
-            if (sheet) {
-                sheet.detents = @[
-                    UISheetPresentationControllerDetent.mediumDetent,
-                    UISheetPresentationControllerDetent.largeDetent
-                ];
-                sheet.prefersGrabberVisible = YES;
-                sheet.preferredCornerRadius = 24.0;
-            }
-        }
-
-        page.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:nav action:@selector(sgr_dismiss)];
-        [topVC presentViewController:nav animated:YES completion:nil];
+        [SGNagareDSPViewController presentFromCurrentPlayer];
     }
 }
 %end

@@ -1,9 +1,14 @@
-#import "SGRStemsViewController.h"
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Copyright (C) 2026 Raka-Saka
+//
+// SGStemsViewController.m - Dedicated 4-Stem Source Separation User Interface
+
+#import "SGStemsViewController.h"
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
-#import "Shared/Nagare/SGNagareBridge.h"
-#import "Shared/Nagare/SCNetModelManager.h"
-#import "Shared/Nagare/SGSpleeterModelManager.h"
+#import "Shared/Stems/SGStemsBridge.h"
+#import "Shared/Stems/SGSpleeterModelManager.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <math.h>
 #import <mach/mach.h>
@@ -11,7 +16,7 @@
 
 static const CGFloat kPadding = 18.0;
 
-@interface SGRStemsViewController () <UIScrollViewDelegate, UIDocumentPickerDelegate>
+@interface SGStemsViewController () <UIScrollViewDelegate, UIDocumentPickerDelegate>
 @property (nonatomic, strong) UILabel *modelDetailLabel;
 @property (nonatomic, strong) UIButton *importModelButton;
 @property (nonatomic, strong) UIButton *downloadURLButton;
@@ -20,12 +25,6 @@ static const CGFloat kPadding = 18.0;
 @property (nonatomic, strong) UIVisualEffectView *blurView;
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIStackView *contentStack;
-@property (nonatomic, strong) UISegmentedControl *tabPicker;
-
-// Tab views
-@property (nonatomic, strong) UIView *stemsTab;
-@property (nonatomic, strong) UIView *subsystemsTab;
-@property (nonatomic, strong) UIView *coreChainTab;
 
 // Stems Controls
 @property (nonatomic, strong) UISwitch *stemsMasterSwitch;
@@ -46,37 +45,12 @@ static const CGFloat kPadding = 18.0;
 @property (nonatomic, strong) UIProgressView *bassMeter;
 @property (nonatomic, strong) UIProgressView *otherMeter;
 
-// Subsystems Controls
-@property (nonatomic, strong) UISwitch *upscalerSwitch;
-@property (nonatomic, strong) UISlider *upscalerSlider;
-@property (nonatomic, strong) UILabel *upscalerQualityLabel;
-@property (nonatomic, strong) UISwitch *restorerSwitch;
-@property (nonatomic, strong) UISlider *restorerSlider;
-@property (nonatomic, strong) UISwitch *hrtfSwitch;
-@property (nonatomic, strong) UISlider *hrtfAngleSlider;
-
-// Core Chain Controls
-@property (nonatomic, strong) UISwitch *smartSwitch;
-@property (nonatomic, strong) UISlider *smartSlider;
-@property (nonatomic, strong) UISwitch *vibeSwitch;
-@property (nonatomic, strong) UISlider *vibeSlider;
-@property (nonatomic, strong) UISwitch *tubeSwitch;
-@property (nonatomic, strong) UISlider *tubeSlider;
-@property (nonatomic, strong) UISwitch *exciterSwitch;
-@property (nonatomic, strong) UISlider *exciterSlider;
-@property (nonatomic, strong) UISwitch *stereoWidthSwitch;
-@property (nonatomic, strong) UISlider *stereoWidthSlider;
-@property (nonatomic, strong) UISwitch *crossfeedSwitch;
-@property (nonatomic, strong) UISlider *crossfeedSlider;
-@property (nonatomic, strong) UISwitch *reverbSwitch;
-@property (nonatomic, strong) UISlider *reverbSlider;
-
 @property (nonatomic, strong) NSTimer *meterTimer;
 @property (nonatomic, strong) UILabel *telemetryLabel;
 @property (nonatomic) NSInteger telemetryTick;
 @end
 
-static float SGRGetCPUUsage(void) {
+static float SGStemsGetCPUUsage(void) {
     kern_return_t kr;
     thread_array_t thread_list;
     mach_msg_type_number_t thread_count;
@@ -102,7 +76,7 @@ static float SGRGetCPUUsage(void) {
     return tot_cpu;
 }
 
-static float SGRGetGPUUsage(void) {
+static float SGStemsGetGPUUsage(void) {
     static mach_port_t (*s_IOServiceGetMatchingService)(mach_port_t, CFDictionaryRef) = NULL;
     static CFMutableDictionaryRef (*s_IOServiceMatching)(const char *) = NULL;
     static kern_return_t (*s_IORegistryEntryCreateCFProperties)(mach_port_t, CFMutableDictionaryRef *, CFAllocatorRef, uint32_t) = NULL;
@@ -142,7 +116,7 @@ static float SGRGetGPUUsage(void) {
     return -1.0f;
 }
 
-static NSString *SGRGetThermalString(void) {
+static NSString *SGStemsGetThermalString(void) {
     if (@available(iOS 11.0, *)) {
         switch (NSProcessInfo.processInfo.thermalState) {
             case NSProcessInfoThermalStateNominal: return @"Nominal";
@@ -154,7 +128,7 @@ static NSString *SGRGetThermalString(void) {
     return @"Nominal";
 }
 
-@implementation SGRStemsViewController
+@implementation SGStemsViewController
 
 + (void)presentFromCurrentPlayer {
     UIViewController *topVC = nil;
@@ -171,7 +145,7 @@ static NSString *SGRGetThermalString(void) {
 
     if (!topVC) return;
 
-    SGRStemsViewController *stemsVC = [[SGRStemsViewController alloc] init];
+    SGStemsViewController *stemsVC = [[SGStemsViewController alloc] init];
     stemsVC.modalPresentationStyle = UIModalPresentationPageSheet;
     if (@available(iOS 15.0, *)) {
         UISheetPresentationController *sheet = stemsVC.sheetPresentationController;
@@ -200,7 +174,7 @@ static NSString *SGRGetThermalString(void) {
 
     [self setupHeader];
     [self setupScrollView];
-    [self setupTabs];
+    [self setupStemsControls];
     [self refreshControlsState];
 
     __weak __typeof__(self) weakSelf = self;
@@ -248,13 +222,13 @@ static NSString *SGRGetThermalString(void) {
 }
 
 - (void)updateTelemetry {
-    float cpu = SGRGetCPUUsage();
-    float gpu = SGRGetGPUUsage();
-    NSString *thermal = SGRGetThermalString();
+    float cpu = SGStemsGetCPUUsage();
+    float gpu = SGStemsGetGPUUsage();
+    NSString *thermal = SGStemsGetThermalString();
 
     if (gpu >= 0.0f) {
         self.telemetryLabel.text = [NSString stringWithFormat:@"CPU: %.0f%% • GPU: %.0f%%", cpu, gpu];
-        if (self.modelDetailLabel && self.tabPicker.selectedSegmentIndex == 0) {
+        if (self.modelDetailLabel) {
             SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
             if (mgr.isModelReady) {
                 self.modelDetailLabel.text = [NSString stringWithFormat:@"Engine: Apple Neural Engine (ANE) / GPU\nRealtime: CPU %.0f%% • GPU %.0f%% • %@", cpu, gpu, thermal];
@@ -262,7 +236,7 @@ static NSString *SGRGetThermalString(void) {
         }
     } else {
         self.telemetryLabel.text = [NSString stringWithFormat:@"CPU: %.0f%% • %@", cpu, thermal];
-        if (self.modelDetailLabel && self.tabPicker.selectedSegmentIndex == 0) {
+        if (self.modelDetailLabel) {
             SGSpleeterModelManager *mgr = [SGSpleeterModelManager sharedManager];
             if (mgr.isModelReady) {
                 self.modelDetailLabel.text = [NSString stringWithFormat:@"Engine: Apple Neural Engine (ANE) / GPU\nRealtime: CPU %.0f%% • %@", cpu, thermal];
@@ -279,7 +253,7 @@ static NSString *SGRGetThermalString(void) {
 }
 
 - (void)updateMeters {
-    if (self.tabPicker.selectedSegmentIndex != 0 || !SGNagareIsStemsEnabled()) {
+    if (!SGStemsIsEnabled()) {
         self.vocalsMeter.progress = 0.0f;
         self.drumsMeter.progress = 0.0f;
         self.bassMeter.progress = 0.0f;
@@ -288,7 +262,7 @@ static NSString *SGRGetThermalString(void) {
     }
 
     float v = 0, d = 0, b = 0, o = 0;
-    SGNagareGetStemMeters(&v, &d, &b, &o);
+    SGStemsGetStemMeters(&v, &d, &b, &o);
 
     float vocalsMult = self.vocalsSlider.value;
     float drumsMult = self.drumsSlider.value;
@@ -303,7 +277,7 @@ static NSString *SGRGetThermalString(void) {
 
 #pragma mark - Helper Functions
 
-static int NagareModeFromSegmentIndex(NSInteger segment) {
+static int SGStemsModeFromSegmentIndex(NSInteger segment) {
     switch (segment) {
         case 1: return 1; // Karaoke (SEPARATOR_MODE_KARAOKE)
         case 2: return 2; // Vocals Only (SEPARATOR_MODE_VOCALS_ONLY)
@@ -314,7 +288,7 @@ static int NagareModeFromSegmentIndex(NSInteger segment) {
     }
 }
 
-static NSInteger SegmentIndexFromNagareMode(int mode) {
+static NSInteger SegmentIndexFromSGStemsMode(int mode) {
     switch (mode) {
         case 1: return 1; // Karaoke
         case 2: return 2; // Vocals
@@ -334,7 +308,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    titleLabel.text = @"Stem Separation & DSP";
+    titleLabel.text = @"Stem Separation";
     titleLabel.font = [UIFont systemFontOfSize:19 weight:UIFontWeightBold];
     titleLabel.textColor = SGRPrimary();
     [header addSubview:titleLabel];
@@ -362,14 +336,6 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     [closeBtn addTarget:self action:@selector(dismissSelf) forControlEvents:UIControlEventTouchUpInside];
     [header addSubview:closeBtn];
 
-    // Segmented tab picker
-    self.tabPicker = [[UISegmentedControl alloc] initWithItems:@[@"4 Stems", @"Subsystems", @"Core Chain"]];
-    self.tabPicker.translatesAutoresizingMaskIntoConstraints = NO;
-    self.tabPicker.selectedSegmentIndex = 0;
-    self.tabPicker.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-    [self.tabPicker addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
-    [self.blurView.contentView addSubview:self.tabPicker];
-
     [NSLayoutConstraint activateConstraints:@[
         [header.topAnchor constraintEqualToAnchor:self.blurView.contentView.safeAreaLayoutGuide.topAnchor constant:12],
         [header.leadingAnchor constraintEqualToAnchor:self.blurView.contentView.leadingAnchor constant:kPadding],
@@ -391,11 +357,6 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
         [closeBtn.trailingAnchor constraintEqualToAnchor:header.trailingAnchor],
         [closeBtn.widthAnchor constraintEqualToConstant:32],
         [closeBtn.heightAnchor constraintEqualToConstant:32],
-
-        [self.tabPicker.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:12],
-        [self.tabPicker.leadingAnchor constraintEqualToAnchor:self.blurView.contentView.leadingAnchor constant:kPadding],
-        [self.tabPicker.trailingAnchor constraintEqualToAnchor:self.blurView.contentView.trailingAnchor constant:-kPadding],
-        [self.tabPicker.heightAnchor constraintEqualToConstant:32],
     ]];
 }
 
@@ -414,8 +375,11 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     self.contentStack.layoutMarginsRelativeArrangement = YES;
     [self.scrollView addSubview:self.contentStack];
 
+    // Find the header view for layout anchoring
+    UIView *header = self.blurView.contentView.subviews.firstObject;
+
     [NSLayoutConstraint activateConstraints:@[
-        [self.scrollView.topAnchor constraintEqualToAnchor:self.tabPicker.bottomAnchor constant:10],
+        [self.scrollView.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:10],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.blurView.contentView.leadingAnchor],
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.blurView.contentView.trailingAnchor],
         [self.scrollView.bottomAnchor constraintEqualToAnchor:self.blurView.contentView.bottomAnchor],
@@ -428,50 +392,13 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     ]];
 }
 
-- (void)setupTabs {
-    [self setupStemsTab];
-    [self setupSubsystemsTab];
-    [self setupCoreChainTab];
-
-    [self showTabAtIndex:0];
-}
-
-- (void)showTabAtIndex:(NSInteger)index {
-    for (UIView *subview in self.contentStack.arrangedSubviews) {
-        [self.contentStack removeArrangedSubview:subview];
-        [subview removeFromSuperview];
-    }
-    UIView *target = nil;
-    if (index == 0) target = self.stemsTab;
-    else if (index == 1) target = self.subsystemsTab;
-    else if (index == 2) target = self.coreChainTab;
-    if (target) {
-        target.hidden = NO;
-        [self.contentStack addArrangedSubview:target];
-    }
-    [self.view layoutIfNeeded];
-    [self.scrollView setContentOffset:CGPointZero animated:NO];
-}
-
-- (void)tabChanged:(UISegmentedControl *)sender {
-    [UIView transitionWithView:self.scrollView duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
-        [self showTabAtIndex:sender.selectedSegmentIndex];
-    } completion:nil];
-}
-
 - (void)dismissSelf {
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 
-#pragma mark - Stems Tab
+#pragma mark - Stems UI Construction
 
-- (void)setupStemsTab {
-    UIStackView *stack = [[UIStackView alloc] init];
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 14.0;
-    self.stemsTab = stack;
-
+- (void)setupStemsControls {
     // Master Switch Card
     UIView *card = [self createCardView];
     [card.heightAnchor constraintEqualToConstant:84].active = YES;
@@ -520,12 +447,12 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
         [self.modelDownloadProgress.topAnchor constraintEqualToAnchor:cardRow.bottomAnchor constant:8],
         [self.modelDownloadProgress.heightAnchor constraintEqualToConstant:3],
     ]];
-    [stack addArrangedSubview:card];
+    [self.contentStack addArrangedSubview:card];
 
     // Neural Model Runtime & Management Card
     UILabel *modelHeader = [self createSectionHeader:@"Neural Model Runtime & Management"];
     modelHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    [stack addArrangedSubview:modelHeader];
+    [self.contentStack addArrangedSubview:modelHeader];
 
     UIView *modelCard = [self createCardView];
 
@@ -612,12 +539,12 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
         [btnRow2.bottomAnchor constraintEqualToAnchor:modelCard.bottomAnchor constant:-12],
     ]];
 
-    [stack addArrangedSubview:modelCard];
+    [self.contentStack addArrangedSubview:modelCard];
 
     // Presets Mode Picker
     UILabel *modesHeader = [self createSectionHeader:@"Separation Mode"];
     modesHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    [stack addArrangedSubview:modesHeader];
+    [self.contentStack addArrangedSubview:modesHeader];
 
     self.modePicker = [[UISegmentedControl alloc] initWithItems:@[@"Custom", @"Karaoke", @"Vocals", @"Drums", @"Bass", @"Backing"]];
     self.modePicker.translatesAutoresizingMaskIntoConstraints = NO;
@@ -625,12 +552,12 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     self.modePicker.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     [self.modePicker addTarget:self action:@selector(modePicked:) forControlEvents:UIControlEventValueChanged];
     [self.modePicker.heightAnchor constraintEqualToConstant:32].active = YES;
-    [stack addArrangedSubview:self.modePicker];
+    [self.contentStack addArrangedSubview:self.modePicker];
 
     // 4 Sliders (Vocals, Drums, Bass, Other)
     UILabel *slidersHeader = [self createSectionHeader:@"Stem Balance"];
     slidersHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    [stack addArrangedSubview:slidersHeader];
+    [self.contentStack addArrangedSubview:slidersHeader];
 
     UIView *vocalsCard = [self createStemSliderRow:@"Vocals"
                                             symbol:@"mic.fill"
@@ -639,7 +566,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
                                              label:&_vocalsLabel
                                              meter:&_vocalsMeter
                                             action:@selector(vocalsSliderMoved:)];
-    [stack addArrangedSubview:vocalsCard];
+    [self.contentStack addArrangedSubview:vocalsCard];
 
     UIView *drumsCard = [self createStemSliderRow:@"Drums & Transients"
                                            symbol:@"waveform.path"
@@ -648,7 +575,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
                                             label:&_drumsLabel
                                             meter:&_drumsMeter
                                            action:@selector(drumsSliderMoved:)];
-    [stack addArrangedSubview:drumsCard];
+    [self.contentStack addArrangedSubview:drumsCard];
 
     UIView *bassCard = [self createStemSliderRow:@"Bass"
                                           symbol:@"guitars.fill"
@@ -657,7 +584,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
                                            label:&_bassLabel
                                            meter:&_bassMeter
                                           action:@selector(bassSliderMoved:)];
-    [stack addArrangedSubview:bassCard];
+    [self.contentStack addArrangedSubview:bassCard];
 
     UIView *otherCard = [self createStemSliderRow:@"Instruments / Other"
                                            symbol:@"music.quarternote.3"
@@ -666,7 +593,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
                                             label:&_otherLabel
                                             meter:&_otherMeter
                                            action:@selector(otherSliderMoved:)];
-    [stack addArrangedSubview:otherCard];
+    [self.contentStack addArrangedSubview:otherCard];
 
     // Reset button
     UIButton *resetBtn = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -679,7 +606,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     resetBtn.clipsToBounds = YES;
     [resetBtn.heightAnchor constraintEqualToConstant:44].active = YES;
     [resetBtn addTarget:self action:@selector(resetStemsTapped) forControlEvents:UIControlEventTouchUpInside];
-    [stack addArrangedSubview:resetBtn];
+    [self.contentStack addArrangedSubview:resetBtn];
 }
 
 - (UIView *)createStemSliderRow:(NSString *)title
@@ -760,285 +687,6 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     return card;
 }
 
-#pragma mark - Subsystems Tab
-
-- (void)setupSubsystemsTab {
-    UIStackView *stack = [[UIStackView alloc] init];
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 16.0;
-    self.subsystemsTab = stack;
-
-    // 1. Audio Upscaler (SBR / DSEE)
-    UILabel *upHeader = [self createSectionHeader:@"Audio Upscaler (SBR / DSEE)"];
-    upHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    [stack addArrangedSubview:upHeader];
-
-    UIView *upCard = [self createCardView];
-    [upCard.heightAnchor constraintEqualToConstant:128].active = YES;
-
-    UILabel *upTitle = [self createTitleLabel:@"Spectral Band Replication" subtitle:@"Reconstructs high frequencies lost to MP3/AAC"];
-    upTitle.translatesAutoresizingMaskIntoConstraints = NO;
-
-    self.upscalerSwitch = [[UISwitch alloc] init];
-    self.upscalerSwitch.translatesAutoresizingMaskIntoConstraints = NO;
-    self.upscalerSwitch.onTintColor = SGRAccent();
-    [self.upscalerSwitch addTarget:self action:@selector(upscalerToggled:) forControlEvents:UIControlEventValueChanged];
-
-    UIStackView *upRow = [[UIStackView alloc] initWithArrangedSubviews:@[upTitle, self.upscalerSwitch]];
-    upRow.translatesAutoresizingMaskIntoConstraints = NO;
-    upRow.alignment = UIStackViewAlignmentCenter;
-    upRow.distribution = UIStackViewDistributionEqualSpacing;
-    [upCard addSubview:upRow];
-
-    self.upscalerSlider = [[UISlider alloc] init];
-    self.upscalerSlider.translatesAutoresizingMaskIntoConstraints = NO;
-    self.upscalerSlider.minimumValue = 0.0f;
-    self.upscalerSlider.maximumValue = 1.0f;
-    self.upscalerSlider.value = SGNagareGetUpscalerIntensity();
-    self.upscalerSlider.minimumTrackTintColor = SGRAccent();
-    [self.upscalerSlider addTarget:self action:@selector(upscalerSliderMoved:) forControlEvents:UIControlEventValueChanged];
-    [upCard addSubview:self.upscalerSlider];
-
-    self.upscalerQualityLabel = [[UILabel alloc] init];
-    self.upscalerQualityLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.upscalerQualityLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
-    self.upscalerQualityLabel.textColor = SGRSecondary();
-    self.upscalerQualityLabel.text = @"Source Quality: Lossless (High)";
-    [upCard addSubview:self.upscalerQualityLabel];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [upRow.leadingAnchor constraintEqualToAnchor:upCard.leadingAnchor constant:16],
-        [upRow.trailingAnchor constraintEqualToAnchor:upCard.trailingAnchor constant:-16],
-        [upRow.topAnchor constraintEqualToAnchor:upCard.topAnchor constant:12],
-
-        [self.upscalerSlider.leadingAnchor constraintEqualToAnchor:upCard.leadingAnchor constant:16],
-        [self.upscalerSlider.trailingAnchor constraintEqualToAnchor:upCard.trailingAnchor constant:-16],
-        [self.upscalerSlider.topAnchor constraintEqualToAnchor:upRow.bottomAnchor constant:8],
-        [self.upscalerSlider.heightAnchor constraintEqualToConstant:28],
-
-        [self.upscalerQualityLabel.leadingAnchor constraintEqualToAnchor:upCard.leadingAnchor constant:16],
-        [self.upscalerQualityLabel.trailingAnchor constraintEqualToAnchor:upCard.trailingAnchor constant:-16],
-        [self.upscalerQualityLabel.topAnchor constraintEqualToAnchor:self.upscalerSlider.bottomAnchor constant:6],
-    ]];
-    [stack addArrangedSubview:upCard];
-
-    // 2. Dynamic Restorer
-    UILabel *restHeader = [self createSectionHeader:@"Dynamic Range Restorer"];
-    restHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    [stack addArrangedSubview:restHeader];
-
-    UIView *restCard = [self createCardView];
-    [restCard.heightAnchor constraintEqualToConstant:104].active = YES;
-
-    UILabel *restTitle = [self createTitleLabel:@"De-Compress Mastering" subtitle:@"Multi-band expansion to undo loudness-war crushing"];
-    restTitle.translatesAutoresizingMaskIntoConstraints = NO;
-
-    self.restorerSwitch = [[UISwitch alloc] init];
-    self.restorerSwitch.translatesAutoresizingMaskIntoConstraints = NO;
-    self.restorerSwitch.onTintColor = SGRAccent();
-    [self.restorerSwitch addTarget:self action:@selector(restorerToggled:) forControlEvents:UIControlEventValueChanged];
-
-    UIStackView *restRow = [[UIStackView alloc] initWithArrangedSubviews:@[restTitle, self.restorerSwitch]];
-    restRow.translatesAutoresizingMaskIntoConstraints = NO;
-    restRow.alignment = UIStackViewAlignmentCenter;
-    restRow.distribution = UIStackViewDistributionEqualSpacing;
-    [restCard addSubview:restRow];
-
-    self.restorerSlider = [[UISlider alloc] init];
-    self.restorerSlider.translatesAutoresizingMaskIntoConstraints = NO;
-    self.restorerSlider.minimumValue = 0.0f;
-    self.restorerSlider.maximumValue = 1.0f;
-    self.restorerSlider.value = SGNagareGetRestorerIntensity();
-    self.restorerSlider.minimumTrackTintColor = SGRAccent();
-    [self.restorerSlider addTarget:self action:@selector(restorerSliderMoved:) forControlEvents:UIControlEventValueChanged];
-    [restCard addSubview:self.restorerSlider];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [restRow.leadingAnchor constraintEqualToAnchor:restCard.leadingAnchor constant:16],
-        [restRow.trailingAnchor constraintEqualToAnchor:restCard.trailingAnchor constant:-16],
-        [restRow.topAnchor constraintEqualToAnchor:restCard.topAnchor constant:12],
-
-        [self.restorerSlider.leadingAnchor constraintEqualToAnchor:restCard.leadingAnchor constant:16],
-        [self.restorerSlider.trailingAnchor constraintEqualToAnchor:restCard.trailingAnchor constant:-16],
-        [self.restorerSlider.topAnchor constraintEqualToAnchor:restRow.bottomAnchor constant:10],
-        [self.restorerSlider.heightAnchor constraintEqualToConstant:28],
-    ]];
-    [stack addArrangedSubview:restCard];
-
-    // 3. HRTF Binaural Spatializer
-    UILabel *hrtfHeader = [self createSectionHeader:@"Binaural HRTF (MIT KEMAR)"];
-    hrtfHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    [stack addArrangedSubview:hrtfHeader];
-
-    UIView *hrtfCard = [self createCardView];
-    [hrtfCard.heightAnchor constraintEqualToConstant:104].active = YES;
-
-    UILabel *hrtfTitle = [self createTitleLabel:@"Head-Related Transfer Function" subtitle:@"Binaural virtual speakers over headphones"];
-    hrtfTitle.translatesAutoresizingMaskIntoConstraints = NO;
-
-    self.hrtfSwitch = [[UISwitch alloc] init];
-    self.hrtfSwitch.translatesAutoresizingMaskIntoConstraints = NO;
-    self.hrtfSwitch.onTintColor = SGRAccent();
-    [self.hrtfSwitch addTarget:self action:@selector(hrtfToggled:) forControlEvents:UIControlEventValueChanged];
-
-    UIStackView *hrtfRow = [[UIStackView alloc] initWithArrangedSubviews:@[hrtfTitle, self.hrtfSwitch]];
-    hrtfRow.translatesAutoresizingMaskIntoConstraints = NO;
-    hrtfRow.alignment = UIStackViewAlignmentCenter;
-    hrtfRow.distribution = UIStackViewDistributionEqualSpacing;
-    [hrtfCard addSubview:hrtfRow];
-
-    self.hrtfAngleSlider = [[UISlider alloc] init];
-    self.hrtfAngleSlider.translatesAutoresizingMaskIntoConstraints = NO;
-    self.hrtfAngleSlider.minimumValue = -90.0f;
-    self.hrtfAngleSlider.maximumValue = 90.0f;
-    self.hrtfAngleSlider.value = SGNagareGetHRTFAngle();
-    self.hrtfAngleSlider.minimumTrackTintColor = SGRAccent();
-    [self.hrtfAngleSlider addTarget:self action:@selector(hrtfAngleMoved:) forControlEvents:UIControlEventValueChanged];
-    [hrtfCard addSubview:self.hrtfAngleSlider];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [hrtfRow.leadingAnchor constraintEqualToAnchor:hrtfCard.leadingAnchor constant:16],
-        [hrtfRow.trailingAnchor constraintEqualToAnchor:hrtfCard.trailingAnchor constant:-16],
-        [hrtfRow.topAnchor constraintEqualToAnchor:hrtfCard.topAnchor constant:12],
-
-        [self.hrtfAngleSlider.leadingAnchor constraintEqualToAnchor:hrtfCard.leadingAnchor constant:16],
-        [self.hrtfAngleSlider.trailingAnchor constraintEqualToAnchor:hrtfCard.trailingAnchor constant:-16],
-        [self.hrtfAngleSlider.topAnchor constraintEqualToAnchor:hrtfRow.bottomAnchor constant:10],
-        [self.hrtfAngleSlider.heightAnchor constraintEqualToConstant:28],
-    ]];
-    [stack addArrangedSubview:hrtfCard];
-}
-
-#pragma mark - Core Chain Tab
-
-- (void)setupCoreChainTab {
-    UIStackView *stack = [[UIStackView alloc] init];
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 16.0;
-    self.coreChainTab = stack;
-
-    // Smart Enhance
-    UILabel *smartHeader = [self createSectionHeader:@"One-Touch Enhance"];
-    smartHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    [stack addArrangedSubview:smartHeader];
-
-    UIView *smartCard = [self createEffectCard:@"Smart Enhance"
-                                      subtitle:@"Automatic multi-band optimization"
-                                     outSwitch:&_smartSwitch
-                                     outSlider:&_smartSlider
-                                  switchAction:@selector(smartToggled:)
-                                  sliderAction:@selector(smartSliderMoved:)];
-    [stack addArrangedSubview:smartCard];
-
-    // Harmonic & Bass
-    UILabel *harmHeader = [self createSectionHeader:@"Harmonics & Bass"];
-    harmHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    [stack addArrangedSubview:harmHeader];
-
-    UIView *vibeCard = [self createEffectCard:@"Virtual Bass (Missing Fundamental)"
-                                     subtitle:@"Psychoacoustic lower-octave synthesis"
-                                    outSwitch:&_vibeSwitch
-                                    outSlider:&_vibeSlider
-                                 switchAction:@selector(vibeToggled:)
-                                 sliderAction:@selector(vibeSliderMoved:)];
-    [stack addArrangedSubview:vibeCard];
-
-    UIView *tubeCard = [self createEffectCard:@"Tube Warmth"
-                                     subtitle:@"Analog triode harmonic saturation"
-                                    outSwitch:&_tubeSwitch
-                                    outSlider:&_tubeSlider
-                                 switchAction:@selector(tubeToggled:)
-                                 sliderAction:@selector(tubeSliderMoved:)];
-    [stack addArrangedSubview:tubeCard];
-
-    UIView *exciterCard = [self createEffectCard:@"Harmonic Exciter & Air"
-                                        subtitle:@"High-frequency overtone generation"
-                                       outSwitch:&_exciterSwitch
-                                       outSlider:&_exciterSlider
-                                    switchAction:@selector(exciterToggled:)
-                                    sliderAction:@selector(exciterSliderMoved:)];
-    [stack addArrangedSubview:exciterCard];
-
-    // Spatial & Acoustics
-    UILabel *spatHeader = [self createSectionHeader:@"Spatial Audio & Acoustics"];
-    spatHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    [stack addArrangedSubview:spatHeader];
-
-    UIView *widthCard = [self createEffectCard:@"Stereo Widener"
-                                      subtitle:@"Mid/Side ambient spatial expansion"
-                                     outSwitch:&_stereoWidthSwitch
-                                     outSlider:&_stereoWidthSlider
-                                  switchAction:@selector(widthToggled:)
-                                  sliderAction:@selector(widthSliderMoved:)];
-    [stack addArrangedSubview:widthCard];
-
-    UIView *crossfeedCard = [self createEffectCard:@"Headphone Crossfeed"
-                                          subtitle:@"Woodworth ITD interaural delay"
-                                         outSwitch:&_crossfeedSwitch
-                                         outSlider:&_crossfeedSlider
-                                      switchAction:@selector(crossfeedToggled:)
-                                      sliderAction:@selector(crossfeedSliderMoved:)];
-    [stack addArrangedSubview:crossfeedCard];
-
-    UIView *reverbCard = [self createEffectCard:@"Schroeder Reverb"
-                                       subtitle:@"Comb/allpass diffuse spatial room"
-                                      outSwitch:&_reverbSwitch
-                                      outSlider:&_reverbSlider
-                                   switchAction:@selector(reverbToggled:)
-                                   sliderAction:@selector(reverbSliderMoved:)];
-    [stack addArrangedSubview:reverbCard];
-}
-
-- (UIView *)createEffectCard:(NSString *)title
-                    subtitle:(NSString *)subtitle
-                   outSwitch:(UISwitch * __strong *)outSwitch
-                   outSlider:(UISlider * __strong *)outSlider
-                switchAction:(SEL)switchAction
-                sliderAction:(SEL)sliderAction {
-    UIView *card = [self createCardView];
-    [card.heightAnchor constraintEqualToConstant:104].active = YES;
-
-    UILabel *titleLabel = [self createTitleLabel:title subtitle:subtitle];
-    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-
-    UISwitch *sw = [[UISwitch alloc] init];
-    sw.translatesAutoresizingMaskIntoConstraints = NO;
-    sw.onTintColor = SGRAccent();
-    [sw addTarget:self action:switchAction forControlEvents:UIControlEventValueChanged];
-    if (outSwitch) *outSwitch = sw;
-
-    UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[titleLabel, sw]];
-    row.translatesAutoresizingMaskIntoConstraints = NO;
-    row.alignment = UIStackViewAlignmentCenter;
-    row.distribution = UIStackViewDistributionEqualSpacing;
-    [card addSubview:row];
-
-    UISlider *sl = [[UISlider alloc] init];
-    sl.translatesAutoresizingMaskIntoConstraints = NO;
-    sl.minimumValue = 0.0f;
-    sl.maximumValue = 1.0f;
-    sl.value = 0.5f;
-    sl.minimumTrackTintColor = SGRAccent();
-    [sl addTarget:self action:sliderAction forControlEvents:UIControlEventValueChanged];
-    [card addSubview:sl];
-    if (outSlider) *outSlider = sl;
-
-    [NSLayoutConstraint activateConstraints:@[
-        [row.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
-        [row.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
-        [row.topAnchor constraintEqualToAnchor:card.topAnchor constant:12],
-
-        [sl.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
-        [sl.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
-        [sl.topAnchor constraintEqualToAnchor:row.bottomAnchor constant:10],
-        [sl.heightAnchor constraintEqualToConstant:28],
-    ]];
-
-    return card;
-}
-
 #pragma mark - Helper Views
 
 - (UIButton *)createActionButtonWithTitle:(NSString *)title icon:(NSString *)systemIcon action:(SEL)action destructive:(BOOL)destructive {
@@ -1086,26 +734,6 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     return label;
 }
 
-- (UILabel *)createTitleLabel:(NSString *)title subtitle:(NSString *)subtitle {
-    UILabel *label = [[UILabel alloc] init];
-    label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.numberOfLines = 2;
-
-    NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:title attributes:@{
-        NSFontAttributeName: [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold],
-        NSForegroundColorAttributeName: SGRPrimary()
-    }];
-    if (subtitle) {
-        NSAttributedString *sub = [[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"\n%@", subtitle] attributes:@{
-            NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular],
-            NSForegroundColorAttributeName: SGRSecondary()
-        }];
-        [att appendAttributedString:sub];
-    }
-    label.attributedText = att;
-    return label;
-}
-
 #pragma mark - State Refresh
 
 - (void)updateModelStatusUI {
@@ -1113,7 +741,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     NSString *sizeStr = [mgr installedModelSizeString];
 
     if (mgr.isModelReady) {
-        if (SGNagareIsStemsEnabled()) {
+        if (SGStemsIsEnabled()) {
             self.modelStatusLabel.text = sizeStr ? [NSString stringWithFormat:@"● Spleeter Neural Active (%@)", sizeStr] : @"● Spleeter Neural Active";
             self.modelStatusLabel.textColor = SGRAccent();
         } else {
@@ -1173,12 +801,12 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 }
 
 - (void)refreshControlsState {
-    self.stemsMasterSwitch.on = SGNagareIsStemsEnabled();
+    self.stemsMasterSwitch.on = SGStemsIsEnabled();
     [self updateModelStatusUI];
-    self.modePicker.selectedSegmentIndex = SegmentIndexFromNagareMode(SGNagareGetSeparationMode());
+    self.modePicker.selectedSegmentIndex = SegmentIndexFromSGStemsMode(SGStemsGetSeparationMode());
 
     float v = 1, d = 1, b = 1, o = 1;
-    SGNagareGetStemLevels(&v, &d, &b, &o);
+    SGStemsGetStemLevels(&v, &d, &b, &o);
     self.vocalsSlider.value = v;
     self.drumsSlider.value = d;
     self.bassSlider.value = b;
@@ -1188,42 +816,6 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     self.drumsLabel.text = [NSString stringWithFormat:@"%.0f%%", d * 100];
     self.bassLabel.text = [NSString stringWithFormat:@"%.0f%%", b * 100];
     self.otherLabel.text = [NSString stringWithFormat:@"%.0f%%", o * 100];
-
-    self.upscalerSwitch.on = SGNagareIsUpscalerEnabled();
-    self.upscalerSlider.value = SGNagareGetUpscalerIntensity();
-
-    int quality = SGNagareGetDetectedSourceQuality();
-    if (quality == 2) self.upscalerQualityLabel.text = @"Source Quality: Lossless / Hi-Res";
-    else if (quality == 1) self.upscalerQualityLabel.text = @"Source Quality: Medium Bitrate";
-    else self.upscalerQualityLabel.text = @"Source Quality: Low Bitrate (Upscaling Active)";
-
-    self.restorerSwitch.on = SGNagareIsRestorerEnabled();
-    self.restorerSlider.value = SGNagareGetRestorerIntensity();
-
-    self.hrtfSwitch.on = SGNagareIsHRTFEnabled();
-    self.hrtfAngleSlider.value = SGNagareGetHRTFAngle();
-
-    self.smartSwitch.on = SGNagareIsSmartEnhanceEnabled();
-    self.smartSlider.value = SGNagareGetSmartIntensity();
-
-    self.vibeSwitch.on = SGNagareIsVirtualBassEnabled();
-    self.vibeSlider.value = SGNagareGetVirtualBassIntensity();
-
-    self.tubeSwitch.on = SGNagareIsTubeWarmthEnabled();
-    self.tubeSlider.value = SGNagareGetTubeWarmthIntensity();
-
-    self.exciterSwitch.on = SGNagareIsExciterEnabled();
-    self.exciterSlider.value = SGNagareGetExciterIntensity();
-
-    self.stereoWidthSwitch.on = SGNagareIsStereoWidthEnabled();
-    self.stereoWidthSlider.value = MAX(0.0f, SGNagareGetStereoWidth() - 1.0f);
-
-    self.crossfeedSwitch.on = SGNagareIsCrossfeedEnabled();
-    self.crossfeedSlider.value = SGNagareGetCrossfeedAmount();
-
-    self.reverbSwitch.on = SGNagareIsReverbEnabled();
-    float revWet = SGNagareGetReverbIntensity();
-    self.reverbSlider.value = revWet > 0.0f ? (revWet / 0.4f) : 0.5f;
 }
 
 #pragma mark - Actions
@@ -1270,7 +862,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
 }
 
 - (void)reloadEngineTapped {
-    SGNagareReloadSpleeter();
+    SGStemsReloadSpleeter();
     [self updateModelStatusUI];
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Runtime Reloaded"
@@ -1299,7 +891,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
         if (!strongSelf) return;
         NSError *err = nil;
         [mgr deleteInstalledModel:&err];
-        SGNagareSetStemsEnabled(NO);
+        SGStemsSetEnabled(NO);
         strongSelf.stemsMasterSwitch.on = NO;
         [strongSelf refreshControlsState];
     }]];
@@ -1331,7 +923,7 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
         if (!strongSelf) return;
 
         if (success) {
-            SGNagareReloadSpleeter();
+            SGStemsReloadSpleeter();
             [strongSelf refreshControlsState];
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Model Imported"
                                                                            message:@"Spleeter 4-Stem model was successfully imported and activated on Apple Neural Engine."
@@ -1362,13 +954,13 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
             [mgr startDownloadIfNeeded];
         }
     }
-    SGNagareSetStemsEnabled(sender.isOn);
+    SGStemsSetEnabled(sender.isOn);
     [self updateModelStatusUI];
 }
 
 - (void)modePicked:(UISegmentedControl *)sender {
-    int mode = NagareModeFromSegmentIndex(sender.selectedSegmentIndex);
-    SGNagareSetSeparationMode(mode);
+    int mode = SGStemsModeFromSegmentIndex(sender.selectedSegmentIndex);
+    SGStemsSetSeparationMode(mode);
 
     // Apply presets
     switch (mode) {
@@ -1403,162 +995,59 @@ static NSInteger SegmentIndexFromNagareMode(int mode) {
     self.bassLabel.text = [NSString stringWithFormat:@"%.0f%%", b * 100];
     self.otherLabel.text = [NSString stringWithFormat:@"%.0f%%", o * 100];
 
-    SGNagareSetStemsEnabled(YES);
+    SGStemsSetEnabled(YES);
     [self.stemsMasterSwitch setOn:YES animated:YES];
-    SGNagareSetStemLevels(v, d, b, o);
+    SGStemsSetStemLevels(v, d, b, o);
 }
 
 - (void)vocalsSliderMoved:(UISlider *)sender {
     self.vocalsLabel.text = [NSString stringWithFormat:@"%.0f%%", sender.value * 100];
     self.modePicker.selectedSegmentIndex = 0; // Custom
-    SGNagareSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
-    SGNagareSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
+    SGStemsSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
+    SGStemsSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
     if (!self.stemsMasterSwitch.isOn) {
         [self.stemsMasterSwitch setOn:YES animated:YES];
-        SGNagareSetStemsEnabled(YES);
+        SGStemsSetEnabled(YES);
     }
 }
 
 - (void)drumsSliderMoved:(UISlider *)sender {
     self.drumsLabel.text = [NSString stringWithFormat:@"%.0f%%", sender.value * 100];
     self.modePicker.selectedSegmentIndex = 0; // Custom
-    SGNagareSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
-    SGNagareSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
+    SGStemsSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
+    SGStemsSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
     if (!self.stemsMasterSwitch.isOn) {
         [self.stemsMasterSwitch setOn:YES animated:YES];
-        SGNagareSetStemsEnabled(YES);
+        SGStemsSetEnabled(YES);
     }
 }
 
 - (void)bassSliderMoved:(UISlider *)sender {
     self.bassLabel.text = [NSString stringWithFormat:@"%.0f%%", sender.value * 100];
     self.modePicker.selectedSegmentIndex = 0; // Custom
-    SGNagareSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
-    SGNagareSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
+    SGStemsSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
+    SGStemsSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
     if (!self.stemsMasterSwitch.isOn) {
         [self.stemsMasterSwitch setOn:YES animated:YES];
-        SGNagareSetStemsEnabled(YES);
+        SGStemsSetEnabled(YES);
     }
 }
 
 - (void)otherSliderMoved:(UISlider *)sender {
     self.otherLabel.text = [NSString stringWithFormat:@"%.0f%%", sender.value * 100];
     self.modePicker.selectedSegmentIndex = 0; // Custom
-    SGNagareSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
-    SGNagareSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
+    SGStemsSetSeparationMode(6); // SEPARATOR_MODE_CUSTOM
+    SGStemsSetStemLevels(self.vocalsSlider.value, self.drumsSlider.value, self.bassSlider.value, self.otherSlider.value);
     if (!self.stemsMasterSwitch.isOn) {
         [self.stemsMasterSwitch setOn:YES animated:YES];
-        SGNagareSetStemsEnabled(YES);
+        SGStemsSetEnabled(YES);
     }
 }
 
 - (void)resetStemsTapped {
     [self applyStemLevelsVocals:1.0f drums:1.0f bass:1.0f other:1.0f];
     self.modePicker.selectedSegmentIndex = 0;
-    SGNagareSetSeparationMode(6);
-}
-
-// Subsystems
-- (void)upscalerToggled:(UISwitch *)sender {
-    SGNagareSetUpscalerEnabled(sender.isOn);
-}
-
-- (void)upscalerSliderMoved:(UISlider *)sender {
-    SGNagareSetUpscalerIntensity(sender.value);
-}
-
-- (void)restorerToggled:(UISwitch *)sender {
-    SGNagareSetRestorerEnabled(sender.isOn);
-}
-
-- (void)restorerSliderMoved:(UISlider *)sender {
-    SGNagareSetRestorerIntensity(sender.value);
-}
-
-- (void)hrtfToggled:(UISwitch *)sender {
-    SGNagareSetHRTFEnabled(sender.isOn);
-}
-
-- (void)hrtfAngleMoved:(UISlider *)sender {
-    SGNagareSetHRTFAngle(sender.value);
-}
-
-- (void)updateCoreDSPState {
-    BOOL anyCoreActive = self.smartSwitch.isOn || self.vibeSwitch.isOn ||
-                         self.tubeSwitch.isOn || self.exciterSwitch.isOn ||
-                         self.stereoWidthSwitch.isOn || self.crossfeedSwitch.isOn ||
-                         self.reverbSwitch.isOn;
-    SGNagareSetCoreDSPEnabled(anyCoreActive);
-}
-
-// Core Chain
-- (void)smartToggled:(UISwitch *)sender {
-    SGNagareSetSmartEnhance(sender.isOn, self.smartSlider.value);
-    [self updateCoreDSPState];
-}
-
-- (void)smartSliderMoved:(UISlider *)sender {
-    SGNagareSetSmartEnhance(self.smartSwitch.isOn, sender.value);
-}
-
-- (void)vibeToggled:(UISwitch *)sender {
-    SGNagareSetVirtualBass(sender.isOn, self.vibeSlider.value, 120.0f);
-    [self updateCoreDSPState];
-}
-
-- (void)vibeSliderMoved:(UISlider *)sender {
-    SGNagareSetVirtualBass(self.vibeSwitch.isOn, sender.value, 120.0f);
-}
-
-- (void)tubeToggled:(UISwitch *)sender {
-    SGNagareSetTubeWarmth(sender.isOn, self.tubeSlider.value, 0.4f);
-    [self updateCoreDSPState];
-}
-
-- (void)tubeSliderMoved:(UISlider *)sender {
-    SGNagareSetTubeWarmth(self.tubeSwitch.isOn, sender.value, 0.4f);
-}
-
-- (void)exciterToggled:(UISwitch *)sender {
-    SGNagareSetExciter(sender.isOn, self.exciterSlider.value, 4000.0f);
-    SGNagareSetAirBand(sender.isOn, self.exciterSlider.value);
-    [self updateCoreDSPState];
-}
-
-- (void)exciterSliderMoved:(UISlider *)sender {
-    SGNagareSetExciter(self.exciterSwitch.isOn, sender.value, 4000.0f);
-    SGNagareSetAirBand(self.exciterSwitch.isOn, sender.value);
-}
-
-- (void)widthToggled:(UISwitch *)sender {
-    SGNagareSetStereoWidth(sender.isOn, 1.0f + (sender.isOn ? self.stereoWidthSlider.value : 0.0f));
-    [self updateCoreDSPState];
-}
-
-- (void)widthSliderMoved:(UISlider *)sender {
-    SGNagareSetStereoWidth(self.stereoWidthSwitch.isOn, 1.0f + (self.stereoWidthSwitch.isOn ? sender.value : 0.0f));
-}
-
-- (void)crossfeedToggled:(UISwitch *)sender {
-    SGNagareSetCrossfeed(sender.isOn, sender.isOn ? self.crossfeedSlider.value : 0.0f);
-    [self updateCoreDSPState];
-}
-
-- (void)crossfeedSliderMoved:(UISlider *)sender {
-    SGNagareSetCrossfeed(self.crossfeedSwitch.isOn, self.crossfeedSwitch.isOn ? sender.value : 0.0f);
-}
-
-- (void)reverbToggled:(UISwitch *)sender {
-    float wet = sender.isOn ? (self.reverbSlider.value * 0.4f) : 0.0f;
-    float dry = sender.isOn ? (1.0f - self.reverbSlider.value * 0.2f) : 1.0f;
-    SGNagareSetReverb(sender.isOn, 0.5f, 0.5f, wet, dry, 1.0f);
-    [self updateCoreDSPState];
-}
-
-- (void)reverbSliderMoved:(UISlider *)sender {
-    float wet = self.reverbSwitch.isOn ? (sender.value * 0.4f) : 0.0f;
-    float dry = self.reverbSwitch.isOn ? (1.0f - sender.value * 0.2f) : 1.0f;
-    SGNagareSetReverb(self.reverbSwitch.isOn, 0.5f, 0.5f, wet, dry, 1.0f);
+    SGStemsSetSeparationMode(6);
 }
 
 @end

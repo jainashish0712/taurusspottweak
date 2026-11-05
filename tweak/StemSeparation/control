@@ -1,0 +1,9 @@
+Package: com.spoti.pw.stemseparation
+Name: StemSeparation
+Architecture: iphoneos-arm
+Description: 4-Stem Audio Separation (Vocals, Drums, Bass, Other) for Spotify
+Maintainer: Taurus
+Author: Taurus
+Section: Tweaks
+Depends: mobilesubstrate
+Version: 1.0.0

@@ -9,6 +9,7 @@ extern "C" {
 
 typedef enum {
     SGAudioStageSing,
+    SGAudioStageStems,
     SGAudioStageSpeedPitch,
     SGAudioStageEffects,
     SGAudioStageNagare,

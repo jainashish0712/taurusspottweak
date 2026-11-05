@@ -15,28 +15,16 @@ extern NSNotificationName const SGNagareSettingsDidChangeNotification;
 // ============================================================================
 // Lifecycle & Pipeline
 // ============================================================================
-void SGNagareInit(double sampleRate);
-void SGNagareSetSampleRate(double sampleRate);
-void SGNagareReset(void);
-const SGAudioProcessor *SGNagareGetAudioProcessor(void);
+void SGNagareDSPInit(double sampleRate);
+void SGNagareDSPSetSampleRate(double sampleRate);
+void SGNagareDSPReset(void);
+const SGAudioProcessor *SGNagareDSPGetAudioProcessor(void);
 
-// ============================================================================
-// 4-Stem Source Separation (Vocals, Drums, Bass, Other)
-// ============================================================================
-void SGNagareSetStemsEnabled(BOOL enabled);
-BOOL SGNagareIsStemsEnabled(void);
-BOOL SGNagareIsSpleeterReady(void);
-BOOL SGNagareIsSCNetReady(void);
-void SGNagareReloadSpleeter(void);
-
-// Stem levels are linear multipliers [0.0, 2.0], where 1.0 = original volume
-void SGNagareSetStemLevels(float vocals, float drums, float bass, float other);
-void SGNagareGetStemLevels(float *vocals, float *drums, float *bass, float *other);
-void SGNagareGetStemMeters(float *vocals, float *drums, float *bass, float *other);
-
-// 0=Normal, 1=Karaoke, 2=VocalsOnly, 3=BassBoost, 4=DrumsEmphasis, 5=Instrumental, 6=Custom
-void SGNagareSetSeparationMode(int mode);
-int SGNagareGetSeparationMode(void);
+// Aliases for compatibility
+#define SGNagareInit           SGNagareDSPInit
+#define SGNagareSetSampleRate  SGNagareDSPSetSampleRate
+#define SGNagareReset          SGNagareDSPReset
+#define SGNagareGetAudioProcessor SGNagareDSPGetAudioProcessor
 
 // ============================================================================
 // Audio Upscaler (SBR / DSEE Spectral Extension)
@@ -106,10 +94,13 @@ float SGNagareGetCrossfeedAmount(void);
 void SGNagareSetReverb(BOOL enabled, float roomSize, float damping, float wet, float dry, float width);
 BOOL SGNagareIsReverbEnabled(void);
 float SGNagareGetReverbIntensity(void);
+
 void SGNagareSetTransientShaper(BOOL enabled, float attack, float sustain);
 void SGNagareSetLoudnessComp(BOOL enabled, float amount);
+
 void SGNagareSetEQEnabled(BOOL enabled);
 void SGNagareSetEQBands(const float *gains10);
+
 void SGNagareSetDeviceProfile(int profileId);
 void SGNagareGetFFTMagnitudes(float *output, int fftSize);
 

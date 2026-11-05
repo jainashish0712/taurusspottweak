@@ -14,8 +14,8 @@
 #import "Shared/Player/SpeedPitch.h"
 #import "Shared/AnimatedArtwork/AnimatedArtwork.h"
 #import "Player.h"
-#import "SGRStemsViewController.h"
-#import "Shared/Nagare/SGNagareBridge.h"
+#import "SGStemsViewController.h"
+#import "SGNagareDSPViewController.h"
 
 static __weak UIView *sg_moreButton;   // the ⋯ the sliders' panel comes from
 
@@ -96,11 +96,20 @@ static UIMenu *lockScreenStyleMenu(void) {
 }
 
 static UIAction *stemsMenuItem(void) {
-    return [UIAction actionWithTitle:@"Stem Separation & DSP"
-                               image:symbol(@"waveform.badge.magnifyingglass")
+    return [UIAction actionWithTitle:@"Stem Separation"
+                               image:symbol(@"slider.horizontal.4")
                           identifier:nil
                              handler:^(UIAction *action) {
-        [SGRStemsViewController presentFromCurrentPlayer];
+        [SGStemsViewController presentFromCurrentPlayer];
+    }];
+}
+
+static UIAction *nagareDSPMenuItem(void) {
+    return [UIAction actionWithTitle:@"Nagare Audio DSP"
+                               image:symbol(@"waveform.path.ecg")
+                          identifier:nil
+                             handler:^(UIAction *action) {
+        [SGNagareDSPViewController presentFromCurrentPlayer];
     }];
 }
 
@@ -109,6 +118,7 @@ static NSArray<UIMenuElement *> *playerItems(void) {
     UIAction *sound = soundMenu();
     if (sound) [items addObject:sound];
     [items addObject:stemsMenuItem()];
+    [items addObject:nagareDSPMenuItem()];
     [items addObject:lockScreenStyleMenu()];
     [items addObject:backgroundStyleMenu()];
     return items;

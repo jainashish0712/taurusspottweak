@@ -33,7 +33,8 @@
 #import "Shared/LyricsSources/LyricsSources.h"
 #import "Shared/Player/SGLastTrack.h"
 #import "Player.h"
-#import "SGRStemsViewController.h"
+#import "SGStemsViewController.h"
+#import "SGNagareDSPViewController.h"
 
 // The card's height as a share of its width, kept between the two bounds.
 static const CGFloat kCardAspect = 0.5, kCardMinHeight = 168, kCardMaxHeight = 220;
@@ -597,11 +598,16 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
         SGNotedSection(@"Kawarp", kawarpRows, @"Kawarp domain warping and Kawase blur parameters. Tap the album thumbnail in the player to toggle its visibility."),
         SGNotedSection(@"Background opacity", blur, @"Lower opacity makes each background layer more transparent. "
                     @"Canvas and lyrics sliders reduce blur strength directly; at 0% the blur is fully transparent."),
-        SGNotedSection(@"Stem Separation & DSP", @[
-            SGActionRow(@"Stem Separation & Nagare DSP", @"Open 4-stem mixer, upscaler and real-time DSP suite", ^{
-                [SGRStemsViewController presentFromCurrentPlayer];
+        SGNotedSection(@"Stem Separation", @[
+            SGActionRow(@"Stem Separation", @"Open 4-stem mixer with Spleeter CoreML & HPSS", ^{
+                [SGStemsViewController presentFromCurrentPlayer];
             })
-        ], @"Isolate Vocals, Drums, Bass, and Instruments with real-time HPSS and spectral processing."),
+        ], @"Isolate Vocals, Drums, Bass, and Instruments with real-time neural and spectral separation."),
+        SGNotedSection(@"Nagare Audio DSP", @[
+            SGActionRow(@"Nagare Audio DSP", @"Open mastering suite, upscaler, restorer and HRTF spatializer", ^{
+                [SGNagareDSPViewController presentFromCurrentPlayer];
+            })
+        ], @"Audiophile real-time DSP processing: SBR upscaler, dynamic restorer, 10-band EQ, and binaural HRTF."),
         SGNotedSection(@"Controls", @[
                        SGSwitchRow(@"Allow auto-lock while player is open", @"When off, keep the screen awake while the player is open",
                                    SGRKeyPlayerAllowAutoLock),
