@@ -124,6 +124,7 @@ std::atomic<float> g_transientAttack{0.0f};
 std::atomic<float> g_transientSustain{0.0f};
 
 std::atomic<bool> g_loudnessCompEnabled{false};
+std::atomic<float> g_loudnessCompAmount{0.5f};
 
 // Audio format tracking
 std::atomic<uint64_t> g_layout{0};
@@ -260,6 +261,9 @@ void loadPreferences() {
     }
     if ([ud objectForKey:SGKeyNagareLoudnessCompEnabled]) {
         g_loudnessCompEnabled.store([ud boolForKey:SGKeyNagareLoudnessCompEnabled], std::memory_order_relaxed);
+    }
+    if ([ud objectForKey:SGKeyNagareLoudnessCompAmount]) {
+        g_loudnessCompAmount.store([ud floatForKey:SGKeyNagareLoudnessCompAmount], std::memory_order_relaxed);
     }
 }
 
@@ -935,6 +939,7 @@ void SGNagareSetTransientShaper(BOOL enabled, float attack, float sustain) {
 void SGNagareSetLoudnessComp(BOOL enabled, float amount) {
     amount = std::max(0.0f, std::min(1.0f, amount));
     g_loudnessCompEnabled.store(enabled, std::memory_order_relaxed);
+    g_loudnessCompAmount.store(amount, std::memory_order_relaxed);
     nagare_loudness_comp_enable(enabled);
     nagare_loudness_comp_set(amount);
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:SGKeyNagareLoudnessCompEnabled];
