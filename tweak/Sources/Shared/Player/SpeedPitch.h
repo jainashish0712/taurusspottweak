@@ -19,6 +19,10 @@ void SGSetPlayerPitch(float semitones);
 // Whether the output could be reached to change its pitch.
 BOOL SGPlayerPitchAvailable(void);
 #define SGKeyPitchFollowsSpeed @"spotifyglass.speedPitch.follows"
+#define kSGDefaultPitch        (-0.4f)
+#define kSGMaxPitch            (4.0f)
+#define kSGMinPitch            (-4.0f)
+#define kSGPitchStep           (0.4f)
 BOOL SGPlayerPitchFollowsSpeed(void);
 void SGSetPlayerPitchFollowsSpeed(BOOL follows);
 

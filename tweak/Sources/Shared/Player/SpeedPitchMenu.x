@@ -49,8 +49,8 @@ static void animateOpen(void (^animations)(void), void (^completion)(BOOL finish
                      animations:animations completion:completion];
 }
 static const float kMinSpeed = 0.5f, kMaxSpeed = 2, kSpeedStep = 0.05f;
-static const float kMaxPitch = 12;
-static const float kPitchStep = 0.4f;
+static const float kMaxPitch = kSGMaxPitch;
+static const float kPitchStep = kSGPitchStep;
 // Speed is applied at most this often while the slider moves.
 static const NSTimeInterval kSpeedInterval = 0.05;
 
@@ -75,7 +75,7 @@ NSNotificationName const SGSpeedPitchChangedNotification = @"SGSpeedPitchChanged
     UILabel *_title, *_summary;
     UIView *_panel;
     UILabel *_speedName, *_pitchName, *_followName, *_reverbName;
-    UIButton *_speedValue, *_pitchValue, *_reverbValue;
+    UIButton *_speedValue, *_pitchValue, *_reverbValue, *_pitchDownButton, *_pitchUpButton;
     UISlider *_speed, *_pitch, *_reverb;
     UISwitch *_follow;
     float _shownSpeed, _shownPitch, _shownReverb;
@@ -191,8 +191,18 @@ static void placeTick(UISlider *slider) {
     _pitchValue = [self valueButton:@selector(resetPitch)];
     _speed = [self slider:kMinSpeed max:kMaxSpeed normal:1 minImage:@"tortoise.fill" maxImage:@"hare.fill"];
     _speed.accessibilityLabel = @"Speed";
-    _pitch = [self slider:-kMaxPitch max:kMaxPitch normal:0 minImage:@"arrow.down" maxImage:@"arrow.up"];
+    _pitch = [self slider:-kMaxPitch max:kMaxPitch normal:kSGDefaultPitch minImage:@"arrow.down" maxImage:@"arrow.up"];
     _pitch.accessibilityLabel = @"Pitch";
+    _pitchDownButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    _pitchDownButton.accessibilityLabel = @"Decrease pitch";
+    _pitchDownButton.accessibilityHint = @"Decreases pitch by 0.4 semitones";
+    [_pitchDownButton addTarget:self action:@selector(stepPitchDown) forControlEvents:UIControlEventTouchUpInside];
+    [_pitch addSubview:_pitchDownButton];
+    _pitchUpButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    _pitchUpButton.accessibilityLabel = @"Increase pitch";
+    _pitchUpButton.accessibilityHint = @"Increases pitch by 0.4 semitones";
+    [_pitchUpButton addTarget:self action:@selector(stepPitchUp) forControlEvents:UIControlEventTouchUpInside];
+    [_pitch addSubview:_pitchUpButton];
     _reverbName = makeLabel(nameFont, secondary());
     _reverbName.text = @"Reverb";
     _reverbValue = [self valueButton:@selector(resetReverb)];
@@ -256,6 +266,13 @@ static CGFloat panelHeight(void) {
         placeTick((UISlider *)line[2]);
         y += kSliderBlockHeight;
     }
+    if (_pitch.bounds.size.width > 0) {
+        CGRect minRect = [_pitch minimumValueImageRectForBounds:_pitch.bounds];
+        CGRect maxRect = [_pitch maximumValueImageRectForBounds:_pitch.bounds];
+        _pitchDownButton.frame = CGRectMake(0, 0, MAX(28.0, CGRectGetMaxX(minRect) + 2.0), _pitch.bounds.size.height);
+        CGFloat upX = MIN(_pitch.bounds.size.width - 28.0, CGRectGetMinX(maxRect) - 2.0);
+        _pitchUpButton.frame = CGRectMake(upX, 0, _pitch.bounds.size.width - upX, _pitch.bounds.size.height);
+    }
 }
 
 #pragma mark state
@@ -272,7 +289,8 @@ static NSString *speedText(float speed) {
 static float snappedPitch(float value) {
     float steps = roundf(value / kPitchStep);
     float pitch = roundf(steps * 4.0f) / 10.0f;
-    if (fabsf(pitch) < kPitchStep * 0.5f) return 0;
+    if (fabsf(pitch) < 0.05f) pitch = 0.0f;
+    if (fabsf(pitch - kSGDefaultPitch) < 0.05f) pitch = kSGDefaultPitch;
     if (pitch < -kMaxPitch) pitch = -kMaxPitch;
     if (pitch > kMaxPitch) pitch = kMaxPitch;
     return pitch;
@@ -337,9 +355,11 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
         [_reverbValue layoutIfNeeded];
     }];
     _speedValue.enabled = speedAllowed && _shownSpeed != 1;
-    _pitchValue.enabled = pitchAvailable && _shownPitch != 0;
-    _reverbValue.enabled = _shownReverb != 0;
     BOOL follows = SGPlayerPitchFollowsSpeed();
+    _pitchValue.enabled = pitchAvailable && fabsf(_shownPitch - kSGDefaultPitch) > 0.01f;
+    _pitchDownButton.enabled = pitchAvailable && !follows;
+    _pitchUpButton.enabled = pitchAvailable && !follows;
+    _reverbValue.enabled = _shownReverb != 0;
     NSString *followed = follows ? followedPitchText(_shownSpeed) : nil;
     _speed.accessibilityValue = !speedAllowed ? @"Unavailable" : followed ? [NSString stringWithFormat:@"%@, pitch %@", speedText(_shownSpeed), followed] : speedText(_shownSpeed);
     BOOL pitchWhole = fabsf(fabsf(_shownPitch) - roundf(fabsf(_shownPitch))) < 0.05f;
@@ -356,7 +376,7 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
     _panel.accessibilityElementsHidden = !showsPanel;
     for (UIView *view in @[_pitchName, _pitchValue]) view.alpha = follows ? 0 : 1;
     _pitch.alpha = follows ? 0 : SGPlayerPitchAvailable() ? 1 : 0.4;
-    for (UIView *view in @[_pitchName, _pitchValue, _pitch]) view.accessibilityElementsHidden = follows;
+    for (UIView *view in @[_pitchName, _pitchValue, _pitch, _pitchDownButton, _pitchUpButton]) view.accessibilityElementsHidden = follows;
     [NSNotificationCenter.defaultCenter postNotificationName:SGSpeedPitchChangedNotification object:nil
                                                     userInfo:summary ? @{@"summary": summary} : nil];
 }
@@ -439,7 +459,7 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
     } else if (slider == _pitch) {
         float pitch = snappedPitch(slider.value);
         if (pitch == _shownPitch) return;
-        if (pitch == 0 || _shownPitch == 0) SGPlayFeedback(SGFeedbackDetent);
+        if (pitch == kSGDefaultPitch || _shownPitch == kSGDefaultPitch || pitch == 0 || _shownPitch == 0) SGPlayFeedback(SGFeedbackDetent);
         _shownPitch = pitch;
         SGSetPlayerPitch(pitch);
     } else {
@@ -470,10 +490,33 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
     [self showValues];
 }
 
+- (void)stepPitchDown {
+    [self stepPitchBy:-kPitchStep];
+}
+
+- (void)stepPitchUp {
+    [self stepPitchBy:kPitchStep];
+}
+
+- (void)stepPitchBy:(float)delta {
+    if (!SGPlayerPitchAvailable() || SGPlayerPitchFollowsSpeed()) return;
+    float target = snappedPitch(_shownPitch + delta);
+    if (target == _shownPitch) return;
+    if (target == kSGDefaultPitch || target == 0 || _shownPitch == kSGDefaultPitch || _shownPitch == 0) {
+        SGPlayFeedback(SGFeedbackDetent);
+    } else {
+        SGPlayFeedback(SGFeedbackSelection);
+    }
+    _shownPitch = target;
+    [_pitch setValue:target animated:YES];
+    SGSetPlayerPitch(target);
+    [self showValues];
+}
+
 - (void)resetPitch {
-    _shownPitch = 0;
-    SGSetPlayerPitch(0);
-    [_pitch setValue:0 animated:YES];
+    _shownPitch = kSGDefaultPitch;
+    SGSetPlayerPitch(kSGDefaultPitch);
+    [_pitch setValue:kSGDefaultPitch animated:YES];
     [self showValues];
 }
 

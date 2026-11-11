@@ -12,7 +12,7 @@ static const double kOffAfter = 1.5;
 
 #pragma mark - shared between the threads
 
-static float sg_speed = 1, sg_semitones;     // main thread
+static float sg_speed = 1, sg_semitones = kSGDefaultPitch;     // main thread
 static BOOL sg_follows;                      // main thread, pitch follows speed as stored
 static atomic_uint sg_speedBits;             // sg_speed for SPTPlayerState, read on any thread
 static atomic_uint sg_gainBits;              // the output gain, 1 when normal, for the sleep timer's fade
@@ -339,6 +339,8 @@ float SGPlayerPitch(void) {
 
 void SGSetPlayerPitch(float semitones) {
     if ((!SGAudioPipelineAvailable() && !tapped()) || following()) return;
+    if (semitones < kSGMinPitch) semitones = kSGMinPitch;
+    if (semitones > kSGMaxPitch) semitones = kSGMaxPitch;
     sg_semitones = semitones;
     apply();
 }
@@ -357,6 +359,7 @@ void SGSetPlayerPitchFollowsSpeed(BOOL follows) {
     sg_follows = follows;
     // The pitch slider goes while pitch follows, so what it had set goes with it.
     if (follows) sg_semitones = 0;
+    else sg_semitones = kSGDefaultPitch;
     apply();
 }
 
@@ -373,6 +376,7 @@ void SGSetPlayerPitchFollowsSpeed(BOOL follows) {
 %ctor {
     storeFloat(&sg_speedBits, 1);
     storeFloat(&sg_gainBits, 1);
+    sg_semitones = kSGDefaultPitch;
     sg_follows = SGFlag(SGKeyPitchFollowsSpeed, NO);
     static const SGAudioProcessor processor = {prepareOutput, rendered};
     SGAudioPipelineRegister(SGAudioStageSpeedPitch, &processor);
