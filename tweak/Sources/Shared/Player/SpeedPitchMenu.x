@@ -502,11 +502,7 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
     if (!SGPlayerPitchAvailable() || SGPlayerPitchFollowsSpeed()) return;
     float target = snappedPitch(_shownPitch + delta);
     if (target == _shownPitch) return;
-    if (target == kSGDefaultPitch || target == 0 || _shownPitch == kSGDefaultPitch || _shownPitch == 0) {
-        SGPlayFeedback(SGFeedbackDetent);
-    } else {
-        SGPlayFeedback(SGFeedbackSelection);
-    }
+    SGPlayFeedback(SGFeedbackDetent);
     _shownPitch = target;
     [_pitch setValue:target animated:YES];
     SGSetPlayerPitch(target);
