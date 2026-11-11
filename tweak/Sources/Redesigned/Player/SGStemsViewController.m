@@ -130,6 +130,27 @@ static NSString *SGStemsGetThermalString(void) {
     return @"Nominal";
 }
 
+static UIImage *sgr_emptyThumbImage(void) {
+    static UIImage *img;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(1, 1), NO, 0.0);
+        img = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+    });
+    return img;
+}
+
+static void stripSliderThumb(UISlider *slider) {
+    if (!slider) return;
+    UIImage *empty = sgr_emptyThumbImage();
+    [slider setThumbImage:empty forState:UIControlStateNormal];
+    [slider setThumbImage:empty forState:UIControlStateHighlighted];
+    [slider setThumbImage:empty forState:UIControlStateSelected];
+    [slider setThumbImage:empty forState:UIControlStateDisabled];
+    slider.thumbTintColor = UIColor.clearColor;
+}
+
 @implementation SGStemsViewController
 
 + (void)presentFromCurrentPlayer {
@@ -648,6 +669,7 @@ static NSInteger SegmentIndexFromSGStemsMode(int mode) {
     slider.maximumValue = 2.0f;
     slider.value = 1.0f;
     slider.minimumTrackTintColor = color;
+    stripSliderThumb(slider);
     [slider addTarget:self action:action forControlEvents:UIControlEventValueChanged];
     [card addSubview:slider];
     if (outSlider) *outSlider = slider;

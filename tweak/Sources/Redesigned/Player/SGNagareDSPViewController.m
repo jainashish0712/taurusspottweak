@@ -133,6 +133,27 @@ static NSString *SGNagareDSPGetThermalString(void) {
     return @"Nominal";
 }
 
+static UIImage *sgr_emptyThumbImage(void) {
+    static UIImage *img;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(1, 1), NO, 0.0);
+        img = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+    });
+    return img;
+}
+
+static void stripSliderThumb(UISlider *slider) {
+    if (!slider) return;
+    UIImage *empty = sgr_emptyThumbImage();
+    [slider setThumbImage:empty forState:UIControlStateNormal];
+    [slider setThumbImage:empty forState:UIControlStateHighlighted];
+    [slider setThumbImage:empty forState:UIControlStateSelected];
+    [slider setThumbImage:empty forState:UIControlStateDisabled];
+    slider.thumbTintColor = UIColor.clearColor;
+}
+
 @implementation SGNagareDSPViewController
 
 + (void)presentFromCurrentPlayer {
@@ -400,6 +421,7 @@ static NSString *SGNagareDSPGetThermalString(void) {
     self.upscalerSlider.maximumValue = 1.0f;
     self.upscalerSlider.value = SGNagareGetUpscalerIntensity();
     self.upscalerSlider.minimumTrackTintColor = SGRAccent();
+    stripSliderThumb(self.upscalerSlider);
     [self.upscalerSlider addTarget:self action:@selector(upscalerSliderMoved:) forControlEvents:UIControlEventValueChanged];
     [upCard addSubview:self.upscalerSlider];
 
@@ -454,6 +476,7 @@ static NSString *SGNagareDSPGetThermalString(void) {
     self.restorerSlider.maximumValue = 1.0f;
     self.restorerSlider.value = SGNagareGetRestorerIntensity();
     self.restorerSlider.minimumTrackTintColor = SGRAccent();
+    stripSliderThumb(self.restorerSlider);
     [self.restorerSlider addTarget:self action:@selector(restorerSliderMoved:) forControlEvents:UIControlEventValueChanged];
     [restCard addSubview:self.restorerSlider];
 
@@ -497,6 +520,7 @@ static NSString *SGNagareDSPGetThermalString(void) {
     self.hrtfAngleSlider.maximumValue = 90.0f;
     self.hrtfAngleSlider.value = SGNagareGetHRTFAngle();
     self.hrtfAngleSlider.minimumTrackTintColor = SGRAccent();
+    stripSliderThumb(self.hrtfAngleSlider);
     [self.hrtfAngleSlider addTarget:self action:@selector(hrtfAngleMoved:) forControlEvents:UIControlEventValueChanged];
     [hrtfCard addSubview:self.hrtfAngleSlider];
 
@@ -624,6 +648,7 @@ static NSString *SGNagareDSPGetThermalString(void) {
     sl.maximumValue = 1.0f;
     sl.value = 0.5f;
     sl.minimumTrackTintColor = SGRAccent();
+    stripSliderThumb(sl);
     [sl addTarget:self action:sliderAction forControlEvents:UIControlEventValueChanged];
     [card addSubview:sl];
     if (outSlider) *outSlider = sl;

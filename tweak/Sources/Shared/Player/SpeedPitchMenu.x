@@ -122,8 +122,30 @@ static UIImage *endImage(NSString *name, CGFloat size) {
     }];
 }
 
+static UIImage *sgr_emptyThumbImage(void) {
+    static UIImage *img;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(1, 1), NO, 0.0);
+        img = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+    });
+    return img;
+}
+
+static void stripSliderThumb(UISlider *slider) {
+    if (!slider) return;
+    UIImage *empty = sgr_emptyThumbImage();
+    [slider setThumbImage:empty forState:UIControlStateNormal];
+    [slider setThumbImage:empty forState:UIControlStateHighlighted];
+    [slider setThumbImage:empty forState:UIControlStateSelected];
+    [slider setThumbImage:empty forState:UIControlStateDisabled];
+    slider.thumbTintColor = UIColor.clearColor;
+}
+
 - (UISlider *)slider:(float)min max:(float)max normal:(float)normal minImage:(NSString *)minImage maxImage:(NSString *)maxImage {
     UISlider *slider = [UISlider new];
+    stripSliderThumb(slider);
     slider.minimumValue = min;
     slider.maximumValue = max;
     UIColor *track = [UIColor colorWithWhite:1 alpha:0.2];

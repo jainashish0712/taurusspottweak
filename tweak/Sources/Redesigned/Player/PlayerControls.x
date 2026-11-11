@@ -236,7 +236,7 @@ static UILabel *monospaced(UIView *host, NSString *identifier, const void *findK
 // Spotify's slider only drags. A tap in the band around it seeks: anywhere across the duration unit's height,
 // up to kSeekReach past either end of the bar, moving at most kSeekSlop and lifting within kSeekLongest. A tap
 // on the thumb is the thumb's, and a tap on a time is Spotify's, which turns the remaining time into the length.
-static const CGFloat kSeekReach = 12, kSeekSlop = 10, kThumbSlop = 6;
+static const CGFloat kSeekReach = 12, kSeekSlop = 10;
 static const NSTimeInterval kSeekLongest = 0.5;
 // The tap is played to the slider as a short drag, so Spotify's unit seeks the way it does at the end of one.
 // Meanwhile the slider says it is still tracking, until the player's position is this near the place tapped or
@@ -268,9 +268,7 @@ BOOL SGRSeekTapLands(UIView *unit, UISlider *slider, CGPoint point) {
     if (!slider.window || !slider.enabled || ![slider isDescendantOfView:unit] || !CGRectContainsPoint(unit.bounds, point)) return NO;
     CGRect bar = [unit convertRect:slider.bounds fromView:slider];
     if (point.x < CGRectGetMinX(bar) - kSeekReach || point.x > CGRectGetMaxX(bar) + kSeekReach) return NO;
-    CGRect bounds = slider.bounds;
-    CGRect thumb = [slider thumbRectForBounds:bounds trackRect:[slider trackRectForBounds:bounds] value:slider.value];
-    if (CGRectContainsPoint(CGRectInset([unit convertRect:thumb fromView:slider], -kThumbSlop, -kThumbSlop), point)) return NO;
+
     for (UIView *time in @[SGRFindByIdentifier(unit, @"now-playing-time-take-label", &kTakeTimeKey) ?: NSNull.null,
                            SGRFindByIdentifier(unit, @"now-playing-time-remaning-label", &kRemainingTimeKey) ?: NSNull.null]) {
         if ([time isKindOfClass:UIView.class] && !time.hidden && CGRectContainsPoint([unit convertRect:time.bounds fromView:time], point)) return NO;
@@ -366,6 +364,27 @@ static void seekTo(UISlider *slider, CGFloat share) {
 }
 @end
 
+static UIImage *sgr_emptyThumbImage(void) {
+    static UIImage *img;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(1, 1), NO, 0.0);
+        img = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+    });
+    return img;
+}
+
+static void stripSliderThumb(UISlider *slider) {
+    if (!slider) return;
+    UIImage *empty = sgr_emptyThumbImage();
+    [slider setThumbImage:empty forState:UIControlStateNormal];
+    [slider setThumbImage:empty forState:UIControlStateHighlighted];
+    [slider setThumbImage:empty forState:UIControlStateSelected];
+    [slider setThumbImage:empty forState:UIControlStateDisabled];
+    slider.thumbTintColor = UIColor.clearColor;
+}
+
 static void watchSlider(UIView *host) {
     UISlider *slider = (UISlider *)SGRFindByIdentifier(host, @"SPTNowPlayingSliderV2", &kSliderKey);
     if (![slider isKindOfClass:UISlider.class]) return;
@@ -378,10 +397,9 @@ static void watchSlider(UIView *host) {
         SGLog(@"redesign player: a tap around the progress bar seeks");
     }
     tap.slider = slider;
-    // Music's look, asked from a pass outside the slider's own layout.
     slider.minimumTrackTintColor = UIColor.whiteColor;
     slider.maximumTrackTintColor = [UIColor colorWithWhite:1 alpha:0.24];
-    slider.thumbTintColor = UIColor.clearColor;
+    stripSliderThumb(slider);
 }
 
 // Music's scrubber: the volume row's numbers again — a 7pt capsule at rest, 18pt while held, white fill
@@ -411,7 +429,16 @@ static BOOL isNowPlayingBar(UIView *view) {
     CGRect track = %orig;
     UISlider *slider = (UISlider *)self;
     CGFloat height = slider.isTracking ? kSeekTrackHeld : kSeekTrackRest, midY = CGRectGetMidY(track);
-    return CGRectMake(track.origin.x, midY - height / 2, track.size.width, height);
+    return CGRectMake(0, midY - height / 2, bounds.size.width, height);
+}
+- (CGRect)thumbRectForBounds:(CGRect)bounds trackRect:(CGRect)rect value:(float)value {
+    if (isNowPlayingBar((UIView *)self)) return %orig;
+    UISlider *slider = (UISlider *)self;
+    float min = slider.minimumValue, max = slider.maximumValue;
+    CGFloat ratio = (max > min) ? (CGFloat)((value - min) / (max - min)) : 0;
+    ratio = MAX(0, MIN(1, ratio));
+    CGFloat x = rect.origin.x + rect.size.width * ratio;
+    return CGRectMake(x, CGRectGetMidY(rect), 0, 0);
 }
 - (void)didMoveToWindow {
     %orig;
@@ -423,32 +450,30 @@ static BOOL isNowPlayingBar(UIView *view) {
     UISlider *slider = (UISlider *)self;
     slider.minimumTrackTintColor = UIColor.whiteColor;
     slider.maximumTrackTintColor = [UIColor colorWithWhite:1 alpha:0.24];
-    slider.thumbTintColor = slider.isTracking ? UIColor.whiteColor : UIColor.clearColor;
+    stripSliderThumb(slider);
 }
 - (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
     if (isNowPlayingBar((UIView *)self)) return %orig;
     BOOL began = %orig;
-    if (began) {
-        UISlider *slider = (UISlider *)self;
-        slider.minimumTrackTintColor = UIColor.whiteColor;
-        slider.maximumTrackTintColor = [UIColor colorWithWhite:1 alpha:0.24];
-        slider.thumbTintColor = UIColor.whiteColor;
-        [slider setNeedsLayout];
-    }
+    UISlider *slider = (UISlider *)self;
+    slider.minimumTrackTintColor = UIColor.whiteColor;
+    slider.maximumTrackTintColor = [UIColor colorWithWhite:1 alpha:0.24];
+    stripSliderThumb(slider);
+    [slider setNeedsLayout];
     return began;
 }
 - (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
     %orig;
     if (isNowPlayingBar((UIView *)self)) return;
     UISlider *slider = (UISlider *)self;
-    slider.thumbTintColor = UIColor.clearColor;
+    stripSliderThumb(slider);
     [slider setNeedsLayout];
 }
 - (void)cancelTrackingWithEvent:(UIEvent *)event {
     %orig;
     if (isNowPlayingBar((UIView *)self)) return;
     UISlider *slider = (UISlider *)self;
-    slider.thumbTintColor = UIColor.clearColor;
+    stripSliderThumb(slider);
     [slider setNeedsLayout];
 }
 %end

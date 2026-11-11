@@ -1034,8 +1034,10 @@ static SGRKawarpView *sg_kawarpView;
 BOOL SGRPlayerKawarpShowing(void) {
     SGRPlayerBackgroundKind background = SGRPlayerBackground();
     return background == SGRPlayerBackgroundKawarp
+        || background == SGRPlayerBackgroundFill
         || (background == SGRPlayerBackgroundAnimated
-            && SGRPlayerAnimatedFallback() == SGRPlayerBackgroundKawarp);
+            && (SGRPlayerAnimatedFallback() == SGRPlayerBackgroundKawarp
+                || SGRPlayerAnimatedFallback() == SGRPlayerBackgroundFill));
 }
 
 UIView *SGRPlayerKawarpPreview(void) {
@@ -1051,6 +1053,35 @@ static void layOutKawarp(SGRArtworkField *field) {
     CGFloat screen = field.window.bounds.size.height ?: size.height;
     CGRect frame = CGRectMake(0, 0, size.width, MAX(size.height, screen) + field.bleed.bottom);
     if (!CGRectEqualToRect(sg_kawarpView.frame, frame)) sg_kawarpView.frame = frame;
+
+    SGRPlayerBackgroundKind background = SGRPlayerBackground();
+    BOOL isFill = (background == SGRPlayerBackgroundFill)
+        || (background == SGRPlayerBackgroundAnimated && SGRPlayerAnimatedFallback() == SGRPlayerBackgroundFill);
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    if (isFill) {
+        CAGradientLayer *mask = (CAGradientLayer *)sg_kawarpView.layer.mask;
+        if (![mask isKindOfClass:CAGradientLayer.class]) {
+            mask = [CAGradientLayer layer];
+            mask.startPoint = CGPointMake(0.5, 0);
+            mask.endPoint = CGPointMake(0.5, 1);
+            sg_kawarpView.layer.mask = mask;
+        }
+        mask.frame = sg_kawarpView.bounds;
+        CGFloat h = MAX(1, CGRectGetHeight(sg_kawarpView.bounds));
+        CGFloat start = MIN(1.0, MAX(0.0, (screen * 0.45) / h));
+        CGFloat end = MIN(1.0, MAX(0.0, (screen * 0.62) / h));
+        mask.colors = @[(id)[UIColor colorWithWhite:1 alpha:0].CGColor,
+                        (id)[UIColor colorWithWhite:1 alpha:0].CGColor,
+                        (id)[UIColor colorWithWhite:1 alpha:1].CGColor,
+                        (id)[UIColor colorWithWhite:1 alpha:1].CGColor];
+        mask.locations = @[@(0.0), @(start), @(end), @(1.0)];
+        sg_kawarpView.alpha = field.fillOpacity;
+    } else {
+        sg_kawarpView.layer.mask = nil;
+        sg_kawarpView.alpha = 1.0;
+    }
+    [CATransaction commit];
 }
 
 void SGRPlayerKawarpUpdate(void) {
